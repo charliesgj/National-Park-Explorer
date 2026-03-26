@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>North America National Parks Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --border:#2a3441;
+    --accent:#c8a96e; --accent2:#7fb069; --accent-ca:#6eafc8;
+    --text:#e6e6e6; --text-muted:#7a8899; --text-dim:#3d4f63;
+    --red:#d4634c; --panel-width:380px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"DM Sans",sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+
+  #topbar { display:flex; align-items:center; gap:8px; padding:0 14px; height:56px; background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap; }
+  #logo { font-family:"Playfair Display",serif; font-size:16px; color:var(--accent); letter-spacing:.02em; white-space:nowrap; margin-right:4px; }
+  #logo span { color:var(--text-muted); font-size:11px; font-family:"DM Mono",monospace; font-style:italic; }
+  .filter-group { display:flex; align-items:center; gap:7px; flex:1; flex-wrap:wrap; }
+  #search-wrap { position:relative; flex:1; min-width:130px; max-width:200px; }
+  #search-wrap svg { position:absolute; left:9px; top:50%; transform:translateY(-50%); opacity:.4; }
+  #search { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:"DM Sans",sans-serif; font-size:13px; padding:7px 10px 7px 30px; outline:none; transition:border-color .2s; }
+  #search:focus { border-color:var(--accent); }
+  #search::placeholder { color:var(--text-muted); }
+  select { background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:"DM Sans",sans-serif; font-size:12px; padding:6px 8px; outline:none; cursor:pointer; }
+  #range-wrap { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); white-space:nowrap; }
+  #year-range { accent-color:var(--accent); cursor:pointer; width:90px; }
+  #year-label { font-family:"DM Mono",monospace; font-size:12px; color:var(--accent); min-width:34px; }
+  #reset-btn { background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--text-muted); font-family:"DM Sans",sans-serif; font-size:12px; padding:6px 10px; cursor:pointer; transition:all .2s; white-space:nowrap; }
+  #reset-btn:hover { border-color:var(--red); color:var(--red); }
+  #lang-btn { background:transparent; border:1px solid var(--accent); border-radius:6px; color:var(--accent); font-family:"DM Mono",monospace; font-size:12px; padding:5px 10px; cursor:pointer; transition:all .2s; white-space:nowrap; flex-shrink:0; }
+  #lang-btn:hover { background:var(--accent); color:var(--bg); }
+
+  #main { display:flex; flex:1; overflow:hidden; position:relative; }
+  #map { flex:1; z-index:1; }
+
+  #sidebar { width:var(--panel-width); background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; transition:width .3s ease; flex-shrink:0; }
+  #sidebar.collapsed { width:0; }
+  #sidebar-toggle { position:absolute; right:var(--panel-width); top:50%; transform:translateY(-50%); z-index:1000; background:var(--surface); border:1px solid var(--border); border-right:none; border-radius:6px 0 0 6px; color:var(--text-muted); padding:10px 6px; cursor:pointer; transition:right .3s ease; font-size:14px; }
+  #sidebar-toggle.collapsed { right:0; border-right:1px solid var(--border); border-left:none; border-radius:0 6px 6px 0; }
+
+  #park-list-header { padding:12px 16px 9px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  #park-list-header h2 { font-family:"Playfair Display",serif; font-size:15px; color:var(--accent); font-weight:400; }
+  #park-count { font-family:"DM Mono",monospace; font-size:11px; color:var(--text-muted); }
+  #sort-bar { display:flex; padding:8px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .sort-btn { flex:1; background:transparent; border:1px solid var(--border); color:var(--text-muted); font-family:"DM Sans",sans-serif; font-size:11px; padding:5px 0; cursor:pointer; transition:all .15s; }
+  .sort-btn:first-child { border-radius:5px 0 0 5px; }
+  .sort-btn:last-child { border-radius:0 5px 5px 0; border-left:none; }
+  .sort-btn:not(:first-child):not(:last-child) { border-left:none; }
+  .sort-btn.active { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+  #park-list { overflow-y:auto; flex:1; }
+  #park-list::-webkit-scrollbar { width:4px; }
+  #park-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  .park-item { padding:9px 16px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .15s; display:flex; gap:9px; align-items:flex-start; }
+  .park-item:hover { background:var(--surface2); }
+  .park-item.active { background:#1a2228; }
+  .park-item.active.us { border-left:3px solid var(--accent2); }
+  .park-item.active.ca { border-left:3px solid var(--accent-ca); }
+  .park-rank { font-family:"DM Mono",monospace; font-size:10px; color:var(--text-dim); min-width:20px; padding-top:3px; }
+  .park-item-body { flex:1; min-width:0; }
+  .park-item-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:1px; display:flex; align-items:center; gap:4px; }
+  .wiki-link { color:var(--text-dim); font-size:10px; text-decoration:none; flex-shrink:0; opacity:0; transition:opacity .15s; font-family:"DM Mono",monospace; }
+  .park-item:hover .wiki-link { opacity:1; }
+  .wiki-link:hover { color:var(--accent); }
+  .wiki-link-title { color:var(--text-dim); font-size:13px; text-decoration:none; font-family:"DM Mono",monospace; margin-left:4px; opacity:.5; transition:opacity .2s; }
+  .wiki-link-title:hover { opacity:1; color:var(--accent); }
+  .park-item-fr { font-size:10px; color:var(--text-dim); font-style:italic; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:2px; }
+  .park-item-meta { font-size:11px; color:var(--text-muted); display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .badge { font-size:9px; padding:1px 5px; border-radius:3px; font-weight:600; letter-spacing:.04em; }
+  .badge.us { background:rgba(200,169,110,.15); color:var(--accent); }
+  .badge.ca { background:rgba(110,175,200,.15); color:var(--accent-ca); }
+
+  #detail-panel { position:absolute; bottom:0; left:0; right:var(--panel-width); background:var(--surface); border-top:1px solid var(--border); max-height:340px; display:none; flex-direction:column; z-index:900; transition:right .3s ease; }
+  #detail-panel.open { display:flex; }
+  #detail-header { display:flex; align-items:flex-start; justify-content:space-between; padding:12px 18px 9px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  #detail-title { font-family:"Playfair Display",serif; font-size:19px; color:var(--accent); font-weight:700; line-height:1.2; }
+  #detail-title-fr { font-size:11px; color:var(--text-dim); font-style:italic; margin-top:2px; }
+  #detail-subtitle { font-size:11px; color:var(--text-muted); margin-top:3px; font-family:"DM Mono",monospace; }
+  #detail-close { background:transparent; border:1px solid var(--border); border-radius:4px; color:var(--text-muted); cursor:pointer; padding:4px 8px; font-size:15px; flex-shrink:0; margin-left:10px; transition:all .15s; }
+  #detail-close:hover { color:var(--red); border-color:var(--red); }
+  #detail-body { padding:12px 18px 14px; overflow-y:auto; display:grid; grid-template-columns:185px 170px 1fr; gap:16px; }
+  #detail-body::-webkit-scrollbar { width:4px; }
+  #detail-body::-webkit-scrollbar-thumb { background:var(--border); }
+
+  #detail-photo-col { display:flex; flex-direction:column; gap:5px; }
+  #detail-photo-wrap { position:relative; border-radius:7px; overflow:hidden; height:155px; background:var(--surface2); }
+  #detail-photo { width:100%; height:100%; object-fit:cover; display:block; opacity:0; transition:opacity .5s; }
+  #detail-photo.loaded { opacity:1; }
+  #photo-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--text-dim); font-size:10px; gap:5px; }
+  #photo-credit { font-size:9px; color:var(--text-dim); font-style:italic; text-align:center; }
+  #photo-credit a { color:var(--text-dim); text-decoration:none; }
+  #photo-credit a:hover { color:var(--text-muted); }
+  .detail-stats { display:flex; flex-direction:column; gap:8px; }
+  .stat-label { font-family:"DM Mono",monospace; font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); margin-bottom:2px; }
+  .stat-val { font-size:13px; color:var(--text); font-weight:500; }
+  .stat-val .accent { color:var(--accent); }
+  .stat-val .green { color:var(--accent2); }
+  .stat-val .blue { color:var(--accent-ca); }
+  #detail-desc { font-size:12.5px; line-height:1.75; color:#b0bec5; overflow-y:auto; }
+  #detail-desc strong { color:var(--accent); font-weight:500; }
+  #detail-desc .note-fr { font-size:11px; color:var(--text-dim); border-left:2px solid var(--border); padding-left:8px; margin-top:8px; font-style:italic; }
+
+  .leaflet-container { background:#0d1117 !important; }
+  .custom-marker { width:10px; height:10px; border-radius:50%; cursor:pointer; transition:all .2s; }
+  .custom-marker.us { background:var(--accent2); border:2px solid rgba(127,176,105,.35); }
+  .custom-marker.ca { background:var(--accent-ca); border:2px solid rgba(110,175,200,.35); }
+  .custom-marker:hover, .custom-marker.highlight { transform:scale(1.6); }
+  .custom-marker.us:hover, .custom-marker.us.highlight { background:var(--accent); border-color:rgba(200,169,110,.6); }
+  .custom-marker.ca:hover, .custom-marker.ca.highlight { background:#8dcbe8; border-color:rgba(110,175,200,.7); }
+  .custom-marker.dimmed { opacity:.11; }
+  .leaflet-popup-content-wrapper { background:var(--surface) !important; border:1px solid var(--border) !important; border-radius:6px !important; color:var(--text) !important; box-shadow:0 8px 32px rgba(0,0,0,.5) !important; }
+  .leaflet-popup-tip { background:var(--surface) !important; }
+  .leaflet-popup-content { margin:10px 14px !important; }
+  .popup-name { font-family:"Playfair Display",serif; font-size:14px; color:var(--accent); margin-bottom:2px; }
+  .popup-name-fr { font-size:10px; color:var(--text-dim); font-style:italic; margin-bottom:3px; }
+  .popup-meta { font-size:11px; color:var(--text-muted); }
+  .leaflet-popup-content-wrapper { cursor:pointer; }
+
+  #status-bar { position:absolute; bottom:0; left:0; right:var(--panel-width); height:26px; background:var(--surface); border-top:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:14px; font-family:"DM Mono",monospace; font-size:10px; color:var(--text-dim); z-index:800; }
+  #status-bar span { color:var(--text-muted); }
+  .legend { position:absolute; bottom:34px; left:12px; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:9px 12px; z-index:800; font-size:11px; color:var(--text-muted); line-height:2; }
+  .legend-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+
+  /* ─── MOBILE BOTTOM SHEET DRAWER ─── */
+  #park-drawer {
+    display:none;
+    position:fixed; bottom:0; left:0; right:0; z-index:2000;
+    background:var(--surface); border-top:1px solid var(--border);
+    border-radius:16px 16px 0 0;
+    flex-direction:column;
+    max-height:75vh;
+    transform:translateY(100%);
+    transition:transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  #park-drawer.open { transform:translateY(0); }
+  #drawer-handle { width:36px; height:4px; background:var(--border); border-radius:2px; margin:10px auto 0; flex-shrink:0; }
+  #drawer-header { padding:10px 16px 8px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  #drawer-header h2 { font-family:"Playfair Display",serif; font-size:14px; color:var(--accent); font-weight:400; }
+  #drawer-count { font-family:"DM Mono",monospace; font-size:11px; color:var(--text-muted); }
+  #drawer-sort { display:flex; padding:7px 12px; border-bottom:1px solid var(--border); flex-shrink:0; gap:0; }
+  #drawer-list { overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch; }
+
+  /* ─── MOBILE FAB (floating action button — list toggle) ─── */
+  #fab-list {
+    display:none;
+    position:fixed; bottom:80px; right:16px; z-index:1500;
+    width:50px; height:50px; border-radius:50%;
+    background:var(--accent); color:var(--bg);
+    border:none; font-size:20px; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,.4);
+    align-items:center; justify-content:center;
+    transition:transform .15s;
+  }
+  #fab-list:active { transform:scale(.92); }
+
+  /* ─── MOBILE DETAIL PANEL (full-screen sheet) ─── */
+  #mobile-detail {
+    display:none;
+    position:fixed; inset:0; z-index:3000;
+    background:var(--surface);
+    flex-direction:column;
+    overflow:hidden;
+  }
+  #mobile-detail.open { display:flex; }
+  #mobile-detail-header {
+    display:flex; align-items:flex-start; justify-content:space-between;
+    padding:14px 16px 10px; border-bottom:1px solid var(--border);
+    flex-shrink:0; background:var(--surface);
+  }
+  #mobile-detail-title { font-family:"Playfair Display",serif; font-size:18px; color:var(--accent); font-weight:700; line-height:1.2; }
+  #mobile-detail-title-fr { font-size:10px; color:var(--text-dim); font-style:italic; margin-top:2px; }
+  #mobile-detail-subtitle { font-size:10px; color:var(--text-muted); margin-top:3px; font-family:"DM Mono",monospace; }
+  #mobile-detail-back { background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--text-muted); padding:5px 10px; font-size:13px; cursor:pointer; flex-shrink:0; }
+  #mobile-detail-body { overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch; padding:0; }
+  #mobile-detail-photo-wrap { position:relative; width:100%; height:200px; background:var(--surface2); }
+  #mobile-detail-photo { width:100%; height:100%; object-fit:cover; display:block; opacity:0; transition:opacity .5s; }
+  #mobile-detail-photo.loaded { opacity:1; }
+  #mobile-photo-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--text-dim); font-size:10px; gap:5px; }
+  #mobile-photo-credit { font-size:9px; color:var(--text-dim); font-style:italic; text-align:center; padding:4px 12px 0; }
+  #mobile-photo-credit a { color:var(--text-dim); text-decoration:none; }
+  #mobile-detail-stats { display:grid; grid-template-columns:1fr 1fr; gap:0; border-bottom:1px solid var(--border); }
+  .mobile-stat { padding:10px 16px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); }
+  .mobile-stat:nth-child(even) { border-right:none; }
+  #mobile-detail-desc { padding:14px 16px 24px; font-size:13px; line-height:1.75; color:#b0bec5; }
+  #mobile-detail-desc strong { color:var(--accent); font-weight:500; }
+
+  /* ─── MOBILE FILTER DRAWER ─── */
+  #filter-drawer {
+    display:none;
+    position:fixed; bottom:0; left:0; right:0; z-index:2500;
+    background:var(--surface); border-top:1px solid var(--border);
+    border-radius:16px 16px 0 0;
+    padding:0 0 env(safe-area-inset-bottom);
+    transform:translateY(100%);
+    transition:transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  #filter-drawer.open { transform:translateY(0); }
+  #filter-drawer-handle { width:36px; height:4px; background:var(--border); border-radius:2px; margin:10px auto 6px; }
+  #filter-drawer-title { font-family:"Playfair Display",serif; font-size:14px; color:var(--accent); text-align:center; padding-bottom:10px; border-bottom:1px solid var(--border); }
+  #filter-drawer-body { padding:16px; display:flex; flex-direction:column; gap:12px; }
+  #filter-drawer-body select,
+  #filter-drawer-body input[type=text] { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; padding:10px 12px; outline:none; -webkit-appearance:none; }
+  #filter-drawer-body .range-row { display:flex; align-items:center; gap:10px; }
+  #filter-drawer-body input[type=range] { flex:1; accent-color:var(--accent); }
+  #filter-drawer-footer { display:flex; gap:10px; padding:12px 16px 20px; border-top:1px solid var(--border); }
+  .drawer-btn { flex:1; padding:11px; border-radius:8px; font-size:14px; font-family:"DM Sans",sans-serif; cursor:pointer; border:none; }
+  .drawer-btn.primary { background:var(--accent); color:var(--bg); font-weight:600; }
+  .drawer-btn.secondary { background:var(--surface2); color:var(--text-muted); border:1px solid var(--border); }
+
+  /* ─── MOBILE BOTTOM NAV ─── */
+  #mobile-nav {
+    display:none;
+    position:fixed; bottom:0; left:0; right:0; z-index:1800;
+    height:60px; background:var(--surface); border-top:1px solid var(--border);
+    flex-direction:row; align-items:center; justify-content:space-around;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .mnav-btn { display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; color:var(--text-dim); cursor:pointer; padding:4px 12px; font-family:"DM Sans",sans-serif; font-size:10px; transition:color .15s; }
+  .mnav-btn.active { color:var(--accent); }
+  .mnav-btn svg { width:22px; height:22px; }
+
+  /* ─── MOBILE OVERLAY ─── */
+  #mobile-overlay {
+    display:none; position:fixed; inset:0; z-index:1900;
+    background:rgba(0,0,0,.5); backdrop-filter:blur(2px);
+  }
+  #mobile-overlay.show { display:block; }
+
+  @media (max-width:768px) {
+    /* Hide desktop elements */
+    :root { --panel-width:0px; }
+    #sidebar, #sidebar-toggle, #status-bar, .legend { display:none !important; }
+    #detail-panel { display:none !important; }  /* use mobile-detail instead */
+
+    /* Topbar: slim down to just logo + lang */
+    #topbar { height:50px; padding:0 12px; flex-wrap:nowrap; gap:0; justify-content:space-between; }
+    #logo { font-size:14px; margin-right:0; }
+    .filter-group { display:none; }  /* filters move to drawer */
+
+    /* Map fills everything minus topbar and bottom nav */
+    #main { height:calc(100vh - 50px - 60px); }
+    #map { height:100%; }
+
+    /* Show mobile-only elements */
+    #mobile-nav { display:flex; }
+    #park-drawer { display:flex; }
+    #fab-list { display:flex; }
+    #filter-drawer { display:flex; flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">North America Parks <span>/ Explorer</span></div>
+  <div class="filter-group">
+    <div id="search-wrap">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search" type="text" placeholder="Search parks..." oninput="applyFilters()">
+    </div>
+    <select id="filter-country" onchange="applyFilters(); populateRegions()">
+      <option value="">All Countries</option>
+      <option value="US">🇺🇸 United States</option>
+      <option value="CA">🇨🇦 Canada</option>
+    </select>
+    <select id="filter-region" onchange="applyFilters()">
+      <option value="">All Regions</option>
+    </select>
+    <div id="range-wrap">
+      <span id="lbl-est">Est. ≤</span>
+      <input type="range" id="year-range" min="1872" max="2024" value="2024" step="1" oninput="updateYearLabel(); applyFilters()">
+      <span id="year-label">2024</span>
+    </div>
+    <button id="reset-btn" onclick="resetFilters()">✕ Reset</button>
+  </div>
+  <button id="lang-btn" onclick="toggleLang()">中文</button>
+</div>
+
+<div id="main">
+  <div id="map"></div>
+  <div id="sidebar">
+    <div id="park-list-header">
+      <h2 id="lbl-parks">Parks</h2>
+      <span id="park-count"></span>
+    </div>
+    <div id="sort-bar">
+      <button class="sort-btn active" onclick="setSort('name',this)" id="sort-az">A–Z</button>
+      <button class="sort-btn" onclick="setSort('rating',this)" id="sort-rating">Rating</button>
+      <button class="sort-btn" onclick="setSort('year',this)" id="sort-year">Founded</button>
+      <button class="sort-btn" onclick="setSort('visitors',this)" id="sort-visitors">Visitors</button>
+    </div>
+    <div id="park-list"></div>
+  </div>
+  <button id="sidebar-toggle" onclick="toggleSidebar()">◀</button>
+</div>
+
+<div id="detail-panel">
+  <div id="detail-header">
+    <div>
+      <div id="detail-title">—</div>
+      <div id="detail-title-fr"></div>
+      <div id="detail-subtitle">—</div>
+    </div>
+    <button id="detail-close" onclick="closeDetail()">✕</button>
+  </div>
+  <div id="detail-body">
+    <div id="detail-photo-col">
+      <div id="detail-photo-wrap">
+        <div id="photo-placeholder">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.25"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span id="photo-loading-text">Loading...</span>
+        </div>
+        <img id="detail-photo" src="" alt="">
+      </div>
+      <div id="photo-credit"></div>
+    </div>
+    <div class="detail-stats" id="detail-stats"></div>
+    <div id="detail-desc"></div>
+  </div>
+</div>
+
+<div id="status-bar">
+  <span id="status-coord">Hover map for coordinates</span>
+  <span>·</span>
+  <span id="status-visible"></span>
+</div>
+
+<!-- ─── MOBILE OVERLAY ─── -->
+<div id="mobile-overlay" onclick="closeMobileDrawers()"></div>
+
+<!-- ─── MOBILE BOTTOM NAV ─── -->
+<div id="mobile-nav">
+  <button class="mnav-btn active" id="mnav-map" onclick="mobileNavMap()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+    Map
+  </button>
+  <button class="mnav-btn" id="mnav-list" onclick="mobileNavList()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    Parks
+  </button>
+  <button class="mnav-btn" id="mnav-filter" onclick="mobileNavFilter()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+    Filter
+  </button>
+  <button class="mnav-btn" id="mnav-lang" onclick="toggleLang()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+    <span id="mnav-lang-label">中文</span>
+  </button>
+</div>
+
+<!-- ─── MOBILE PARK LIST DRAWER ─── -->
+<div id="park-drawer">
+  <div id="drawer-handle"></div>
+  <div id="drawer-header">
+    <h2 id="drawer-lbl-parks">Parks</h2>
+    <span id="drawer-park-count"></span>
+  </div>
+  <div id="drawer-sort">
+    <button class="sort-btn active" onclick="setSort('name',this)" id="dsort-az">A–Z</button>
+    <button class="sort-btn" onclick="setSort('rating',this)" id="dsort-rating">Rating</button>
+    <button class="sort-btn" onclick="setSort('year',this)" id="dsort-year">Founded</button>
+    <button class="sort-btn" onclick="setSort('visitors',this)" id="dsort-visitors">Visitors</button>
+  </div>
+  <div id="drawer-list"></div>
+</div>
+
+<!-- ─── MOBILE FILTER DRAWER ─── -->
+<div id="filter-drawer">
+  <div id="filter-drawer-handle"></div>
+  <div id="filter-drawer-title" id="filter-drawer-lbl">Filters</div>
+  <div id="filter-drawer-body">
+    <input id="m-search" type="text" placeholder="Search parks..." oninput="applyFilters(); renderMobileList()">
+    <select id="m-filter-country" onchange="applyFilters(); populateRegions(); renderMobileList()">
+      <option value="">All Countries</option>
+      <option value="US">🇺🇸 United States</option>
+      <option value="CA">🇨🇦 Canada</option>
+    </select>
+    <select id="m-filter-region" onchange="applyFilters(); renderMobileList()">
+      <option value="">All Regions</option>
+    </select>
+    <div class="range-row">
+      <span style="font-size:12px;color:var(--text-muted);white-space:nowrap" id="m-lbl-est">Est. ≤</span>
+      <input type="range" id="m-year-range" min="1872" max="2024" value="2024" oninput="document.getElementById('m-year-label').textContent=this.value; syncFilters(); applyFilters(); renderMobileList()">
+      <span id="m-year-label" style="font-family:monospace;font-size:12px;color:var(--accent);min-width:34px">2024</span>
+    </div>
+  </div>
+  <div id="filter-drawer-footer">
+    <button class="drawer-btn secondary" onclick="resetMobileFilters()">Reset</button>
+    <button class="drawer-btn primary" onclick="closeMobileDrawers()">Done</button>
+  </div>
+</div>
+
+<!-- ─── MOBILE DETAIL FULL-SCREEN ─── -->
+<div id="mobile-detail">
+  <div id="mobile-detail-header">
+    <div style="flex:1;min-width:0">
+      <div id="mobile-detail-title">—</div>
+      <div id="mobile-detail-title-fr"></div>
+      <div id="mobile-detail-subtitle">—</div>
+    </div>
+    <button id="mobile-detail-back" onclick="closeMobileDetail()">← Back</button>
+  </div>
+  <div id="mobile-detail-body">
+    <div id="mobile-detail-photo-wrap">
+      <div id="mobile-photo-placeholder">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.25"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span id="mobile-photo-loading-text">Loading...</span>
+      </div>
+      <img id="mobile-detail-photo" src="" alt="">
+    </div>
+    <div id="mobile-photo-credit"></div>
+    <div id="mobile-detail-stats" class="mobile-detail-stats"></div>
+    <div id="mobile-detail-desc"></div>
+  </div>
+</div>
+
+<div class="legend">
+  <div><span class="legend-dot" style="background:#7fb069"></span><span id="lbl-legend-us">🇺🇸 U.S. National Park</span></div>
+  <div><span class="legend-dot" style="background:#6eafc8"></span><span id="lbl-legend-ca">🇨🇦 Canada National Park</span></div>
+  <div><span class="legend-dot" style="background:#c8a96e"></span><span id="lbl-legend-sel">Selected</span></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// I18N
+// ══════════════════════════════════════════
+const I18N = {
+  en:{logo:"North America Parks",logoSub:"/ Explorer",search:"Search parks...",allCountries:"All Countries",allRegions:"All Regions",estBefore:"Est. ≤",reset:"✕ Reset",parks:"Parks",parksUnit:"parks",visibleUnit:"visible",sortAZ:"A–Z",sortRating:"Rating",sortYear:"Founded",sortVisitors:"Visitors",statRating:"Rating",statVisitors:"Annual Visitors",statArea:"Area",statEst:"Established",statLoc:"Location",statCountry:"Country",visitorsUnit:"/yr",photoLoading:"Loading photo...",photoVia:"Photo via Wikipedia",noPhoto:"No photo available",hoverMap:"Hover map for coordinates",legendUS:"🇺🇸 U.S. National Park",legendCA:"🇨🇦 Canada National Park",legendSel:"Selected",countryUS:"United States",countryCA:"Canada"},
+  zh:{logo:"北美国家公园",logoSub:"/ 探索地图",search:"搜索公园...",allCountries:"所有国家",allRegions:"所有地区",estBefore:"建立年份 ≤",reset:"✕ 重置",parks:"公园列表",parksUnit:"个公园",visibleUnit:"个显示中",sortAZ:"A–Z",sortRating:"评分",sortYear:"建立年份",sortVisitors:"游客量",statRating:"评分",statVisitors:"年游客量",statArea:"面积",statEst:"建立年份",statLoc:"所在地",statCountry:"国家",visitorsUnit:"/年",photoLoading:"图片加载中...",photoVia:"图片来源：维基百科",noPhoto:"暂无图片",hoverMap:"移动鼠标查看坐标",legendUS:"🇺🇸 美国国家公园",legendCA:"🇨🇦 加拿大国家公园",legendSel:"已选中",countryUS:"美国",countryCA:"加拿大"}
+};
+let lang="en";
+const T=k=>I18N[lang][k]||I18N.en[k]||k;
+
+function applyI18n(){
+  document.getElementById("logo").innerHTML=T("logo")+" <span>"+T("logoSub")+"</span>";
+  document.getElementById("search").placeholder=T("search");
+  const fc=document.getElementById("filter-country");
+  fc.options[0].text=T("allCountries");
+  fc.options[1].text="🇺🇸 "+T("countryUS");
+  fc.options[2].text="🇨🇦 "+T("countryCA");
+  document.getElementById("filter-region").options[0].text=T("allRegions");
+  document.getElementById("lbl-est").textContent=T("estBefore");
+  document.getElementById("reset-btn").textContent=T("reset");
+  document.getElementById("lbl-parks").textContent=T("parks");
+  document.getElementById("sort-az").textContent=T("sortAZ");
+  document.getElementById("sort-rating").textContent=T("sortRating");
+  document.getElementById("sort-year").textContent=T("sortYear");
+  document.getElementById("sort-visitors").textContent=T("sortVisitors");
+  document.getElementById("lbl-legend-us").textContent=T("legendUS");
+  document.getElementById("lbl-legend-ca").textContent=T("legendCA");
+  document.getElementById("lbl-legend-sel").textContent=T("legendSel");
+  document.getElementById("status-coord").textContent=T("hoverMap");
+  renderList();
+  if(activeId) refreshDetailText();
+}
+function toggleLang(){lang=lang==="en"?"zh":"en";document.getElementById("lang-btn").textContent=lang==="en"?"中文":"EN";applyI18n();}
+
+// ══════════════════════════════════════════
+// PARK DATA — US (63) + Canada (48) = 111
+// ══════════════════════════════════════════
+// country: "US" or "CA"
+// region: US state(s) or Canadian province/territory
+// nameFr: French name (Quebec / bilingual parks only)
+// visitors: annual visitors (approximate)
+// areakm: area in km²
+// rating: 4.5–5.0 subjective quality score
+const PARKS = [
+// ── UNITED STATES (63) ──────────────────────────────
+{id:1,country:"US",name:"Yellowstone",zh:"黄石国家公园",region:"WY/MT/ID",lat:44.428,lng:-110.589,year:1872,rating:4.9,visitors:4860000,areakm:8983,desc:"The world's first national park, sitting atop one of Earth's largest volcanic hotspots. Over 10,000 hydrothermal features including <strong>Old Faithful geyser</strong>. Home to grizzly bears, wolves (reintroduced 1995), and vast bison herds. The Grand Prismatic Spring glows with vivid microbial colors.",descZh:"世界第一个国家公园，坐落在地球最大火山热点之一。超过10,000处地热景观，包括<strong>老忠实间歇泉</strong>。是灰熊、狼（1995年重引入）和野牛的家园。大棱镜彩泉以绚丽微生物色彩著称。"},
+{id:2,country:"US",name:"Grand Canyon",zh:"大峡谷国家公园",region:"AZ",lat:36.107,lng:-112.113,year:1919,rating:4.9,visitors:4730000,areakm:4862,desc:"Carved by the Colorado River over 5–6 million years, the canyon stretches <strong>277 miles long, a mile deep</strong>, exposing nearly two billion years of geological history. The Havasupai Tribe still calls the canyon floor home.",descZh:"科罗拉多河历经500至600万年雕刻，峡谷<strong>长277英里、深达1英里</strong>，揭示近20亿年的地球地质历史。哈瓦苏派部落至今仍居住在峡谷底部。"},
+{id:3,country:"US",name:"Great Smoky Mountains",zh:"大烟山国家公园",region:"TN/NC",lat:35.653,lng:-83.507,year:1934,rating:4.8,visitors:12900000,areakm:2114,desc:"The most visited national park in the United States. Named for the <strong>blue-gray mist</strong> shrouding its peaks, it protects the world's finest temperate deciduous forest with over 19,000 documented species. UNESCO World Heritage Site.",descZh:"美国访客最多的国家公园，以笼罩山峰的<strong>蓝灰色薄雾</strong>得名，保护世界最优质的温带落叶林，拥有超过19,000个已记录物种，是UNESCO世界遗产地。"},
+{id:4,country:"US",name:"Zion",zh:"锡安国家公园",region:"UT",lat:37.298,lng:-113.026,year:1919,rating:4.8,visitors:4690000,areakm:595,desc:"Towering sandstone cliffs rise above the Virgin River, which carved the famous <strong>Zion Narrows</strong>—one of the world's great slot canyon hikes. The Angels Landing trail offers a knife-edge ridge scramble with chains bolted into rock.",descZh:"维尔京河穿越壮观砂岩峭壁，形成举世闻名的<strong>锡安峡谷</strong>槽谷。天使降落步道沿刀刃山脊攀爬，铁链固定于岩壁，是公园系统中最刺激的徒步体验之一。"},
+{id:5,country:"US",name:"Rocky Mountain",zh:"落基山国家公园",region:"CO",lat:40.343,lng:-105.684,year:1915,rating:4.7,visitors:4670000,areakm:1076,desc:"Straddling Colorado's Continental Divide. <strong>Trail Ridge Road</strong>, the highest continuous paved road in the U.S. at 12,183 feet, crosses 11 miles above treeline. About one-third of the park lies in alpine tundra.",descZh:"横跨科罗拉多州大陆分水岭。<strong>山脊路</strong>是美国最高连续铺装公路（12,183英尺），11英里路段位于树线以上。约三分之一的面积为高山冻原。"},
+{id:6,country:"US",name:"Acadia",zh:"阿卡迪亚国家公园",region:"ME",lat:44.339,lng:-68.273,year:1916,rating:4.8,visitors:4070000,areakm:198,desc:"First national park east of the Mississippi. <strong>Cadillac Mountain</strong> (1,530 ft) is the highest point on the U.S. Atlantic coast and first to see sunrise part of the year. John D. Rockefeller Jr. built 45 miles of carriage roads through the park.",descZh:"密西西比河以东第一个国家公园。<strong>卡迪拉克山</strong>（1,530英尺）是美国大西洋沿岸最高点。洛克菲勒捐建的45英里马车路贯穿全园。"},
+{id:7,country:"US",name:"Olympic",zh:"奥林匹克国家公园",region:"WA",lat:47.802,lng:-123.604,year:1938,rating:4.8,visitors:3400000,areakm:3734,desc:"Three ecosystems in one park: glaciated peaks, the <strong>Hoh Rain Forest</strong> (up to 12 ft of rain per year), and 73 miles of wild Pacific coastline. One of the most ecologically diverse national parks in the system.",descZh:"三种截然不同的生态系统并存：冰川山脉、<strong>霍雨林</strong>（年降雨高达12英尺）以及73英里原始太平洋海岸线。是公园系统中生态最多样的公园之一。"},
+{id:8,country:"US",name:"Glacier",zh:"冰川国家公园",region:"MT",lat:48.696,lng:-113.718,year:1910,rating:4.9,visitors:3080000,areakm:4101,desc:"The 'Crown of the Continent,' paired with Canada's Waterton Lakes in the world's first International Peace Park. <strong>Going-to-the-Sun Road</strong> crosses Logan Pass on the Continental Divide. Climate change has reduced glaciers from 150+ to ~25.",descZh:"被称为\"大陆之冠\"，与加拿大沃特顿湖共同构成世界第一个国际和平公园。<strong>太阳路</strong>翻越大陆分水岭的洛根山口。气候变化使冰川从150多座减少至约25座。"},
+{id:9,country:"US",name:"Yosemite",zh:"优胜美地国家公园",region:"CA",lat:37.865,lng:-119.538,year:1890,rating:4.9,visitors:3667000,areakm:3074,desc:"Granite walls, thundering waterfalls, and ancient sequoias have inspired conservationists for over a century. <strong>El Capitan</strong>, a 3,000-ft monolith, is the world's premier big-wall climbing destination. John Muir's writings brought President Roosevelt here in 1903.",descZh:"花岗岩峭壁、瀑布和古老红杉林百年来激励无数环保人士。<strong>酋长岩</strong>是3,000英尺高的花岗岩独石，是世界顶级大壁攀岩目的地。"},
+{id:10,country:"US",name:"Bryce Canyon",zh:"布莱斯峡谷国家公园",region:"UT",lat:37.593,lng:-112.187,year:1928,rating:4.8,visitors:2600000,areakm:145,desc:"Not a true canyon but a series of giant natural amphitheaters filled with thousands of <strong>hoodoos</strong>—thin spires of orange, red, and pink rock glowing with otherworldly beauty. One of the finest dark-sky sites in the continental U.S.",descZh:"并非真正峡谷，而是天然圆形剧场汇聚的数千座<strong>石笋柱</strong>——橙、红、粉色奇石尖塔。高海拔使其成为美国本土最佳星空观测地之一。"},
+{id:11,country:"US",name:"Grand Teton",zh:"大提顿国家公园",region:"WY",lat:43.790,lng:-110.682,year:1929,rating:4.8,visitors:3200000,areakm:1255,desc:"The Teton Range rises abruptly from the valley floor without foothills, making its peaks seem impossibly dramatic. <strong>Grand Teton</strong> (13,775 ft) offers world-class technical climbing. Contiguous with Yellowstone, forming one of the world's largest intact temperate ecosystems.",descZh:"提顿山脉从山谷骤然拔起，无丘陵过渡，山峰格外壮观。<strong>大提顿峰</strong>（13,775英尺）是世界顶级技术攀登目的地。与黄石相邻，构成世界最大完整温带生态系统之一。"},
+{id:12,country:"US",name:"Joshua Tree",zh:"约书亚树国家公园",region:"CA",lat:33.873,lng:-115.901,year:1994,rating:4.7,visitors:3400000,areakm:3218,desc:"Straddling two desert ecosystems. The park's namesake <strong>Joshua trees</strong> (giant yuccas) inspired U2's landmark 1987 album. Granite monolith formations are world-renowned for rock climbing and it is one of the Southwest's best spots for Milky Way viewing.",descZh:"横跨莫哈韦和科罗拉多两个沙漠生态系统。标志性的<strong>约书亚树</strong>启发了U2乐队的同名专辑。花岗岩巨石群是世界知名攀岩圣地，也是西南部最佳银河观测地之一。"},
+{id:13,country:"US",name:"Shenandoah",zh:"谢南多厄国家公园",region:"VA",lat:38.533,lng:-78.350,year:1935,rating:4.6,visitors:1600000,areakm:806,desc:"Stretches along Virginia's Blue Ridge Mountains. <strong>Skyline Drive</strong> runs 105 miles the length of the park with 75 overlooks. Over 500 miles of trails including a key section of the Appalachian Trail.",descZh:"沿弗吉尼亚州蓝岭山脉延伸。<strong>天际线大道</strong>全长105英里，75处俯瞰点。超过500英里步道，含阿巴拉契亚小径重要路段。"},
+{id:14,country:"US",name:"Arches",zh:"拱门国家公园",region:"UT",lat:38.733,lng:-109.593,year:1971,rating:4.7,visitors:1800000,areakm:310,desc:"The world's densest concentration of natural stone arches—over 2,000 catalogued. <strong>Delicate Arch</strong>, perched at the canyon rim with the La Sal Mountains as backdrop, is the most photographed landmark in Utah and appears on its license plate.",descZh:"世界最密集的天然石拱汇集地，超过2,000座已编目。<strong>精美拱门</strong>矗立峡谷边缘，以拉萨尔山脉为背景，是犹他州最具代表性的自然地标，也是犹他州车牌的标志。"},
+{id:15,country:"US",name:"Canyonlands",zh:"峡谷地国家公园",region:"UT",lat:38.214,lng:-109.878,year:1964,rating:4.7,visitors:775000,areakm:1366,desc:"Utah's largest national park, carved into three districts by the Colorado and Green Rivers. <strong>Island in the Sky</strong>—a mesa 1,000 feet above the canyon floor—offers sweeping vistas that dwarf even the Grand Canyon.",descZh:"犹他州最大国家公园，由科罗拉多河和格林河分为三区。<strong>天空岛</strong>高于峡谷底部1,000英尺，俯瞰视野甚至超过大峡谷。"},
+{id:16,country:"US",name:"Death Valley",zh:"死亡谷国家公园",region:"CA/NV",lat:36.505,lng:-117.079,year:1994,rating:4.6,visitors:1600000,areakm:13648,desc:"Largest national park in the contiguous U.S. and the hottest, driest, and lowest. <strong>Badwater Basin</strong> (282 ft below sea level) is the lowest point in North America. World record air temperature: 134°F (56.7°C) in 1913.",descZh:"美国本土最大、最热、最干燥、海拔最低的国家公园。<strong>恶水盆地</strong>（低于海平面282英尺）是北美最低点。1913年创下134°F（56.7°C）世界最高可靠气温纪录。"},
+{id:17,country:"US",name:"Sequoia",zh:"红杉国家公园",region:"CA",lat:36.486,lng:-118.566,year:1890,rating:4.8,visitors:1059000,areakm:1635,desc:"Protects the largest living organisms on Earth. <strong>General Sherman Tree</strong> (36 ft diameter, 274 ft tall, 52,500 cubic ft) is the world's largest tree by volume. Giant sequoias can live over 3,000 years and only regenerate seeds in wildfire heat.",descZh:"保护地球上最大的生命体。<strong>谢尔曼将军树</strong>（底部直径36英尺，高274英尺，体积52,500立方英尺）是全球体积最大的树。巨型红杉可活3,000年以上。"},
+{id:18,country:"US",name:"Kings Canyon",zh:"国王峡谷国家公园",region:"CA",lat:36.888,lng:-118.555,year:1940,rating:4.7,visitors:632000,areakm:1869,desc:"Adjacent to Sequoia, protecting the massive Kings River canyon system. In some places <strong>Kings Canyon is deeper than the Grand Canyon</strong>. Far less visited than Sequoia, it is a haven for those seeking true solitude.",descZh:"与红杉国家公园相邻，保护宏伟的国王河峡谷体系。在某些地方<strong>国王峡谷比大峡谷还深</strong>。游客远少于邻近的红杉公园，是寻求宁静的理想之地。"},
+{id:19,country:"US",name:"Mount Rainier",zh:"雷尼尔山国家公园",region:"WA",lat:46.880,lng:-121.727,year:1899,rating:4.8,visitors:1600000,areakm:956,desc:"At 14,411 feet the highest Cascade peak, supporting <strong>26 named glaciers</strong> with more glacial ice than any other peak in the lower 48. In summer, vast subalpine meadows explode with wildflowers. The Wonderland Trail circuits the entire mountain.",descZh:"海拔14,411英尺，是喀斯喀特山脉最高峰，支撑<strong>26座命名冰川</strong>，冰量超过阿拉斯加以外美国本土任何山峰。夏季亚高山草甸野花盛放。"},
+{id:20,country:"US",name:"Crater Lake",zh:"火山口湖国家公园",region:"OR",lat:42.945,lng:-122.109,year:1902,rating:4.8,visitors:770000,areakm:741,desc:"Crater Lake occupies the caldera of Mount Mazama, collapsed 7,700 years ago. At 1,943 feet, it is the deepest lake in the United States. Fed solely by rain and snowmelt, its water achieves <strong>extraordinary clarity and an intense supernatural blue</strong>.",descZh:"占据马扎马山约7,700年前喷发塌陷的火山口。湖深1,943英尺，是美国最深的湖泊。完全由雨雪补给，拥有<strong>无与伦比的湛蓝清澈</strong>，为北美之最。"},
+{id:21,country:"US",name:"Everglades",zh:"大沼泽地国家公园",region:"FL",lat:25.287,lng:-80.899,year:1947,rating:4.5,visitors:1100000,areakm:6107,desc:"The only subtropical preserve in North America—a 'river of grass' of slow-moving water through sawgrass and mangrove. Shelters 36 threatened species including the Florida panther, manatee, and American crocodile—one of the only places where alligators and crocodiles coexist.",descZh:"北美唯一的亚热带保护区，被称为\"草之河\"。栖息着36种受威胁物种，包括佛罗里达山狮、海牛和美国鳄——世界上极少数鳄鱼与短吻鳄共存的地方之一。"},
+{id:22,country:"US",name:"Hawaii Volcanoes",zh:"夏威夷火山国家公园",region:"HI",lat:19.419,lng:-155.289,year:1916,rating:4.8,visitors:1200000,areakm:1309,desc:"Home to two of the world's most active volcanoes: <strong>Kīlauea</strong> (erupting nearly continuously since 1983) and Mauna Loa, the world's largest shield volcano. The park spans from sea level to 13,677 feet on Mauna Loa's summit.",descZh:"涵盖两座世界最活跃火山：<strong>基拉韦厄</strong>（自1983年近乎持续喷发）和世界最大盾状火山冒纳罗亚。园区从海平面延伸至13,677英尺。"},
+{id:23,country:"US",name:"Denali",zh:"德纳利国家公园",region:"AK",lat:63.115,lng:-151.193,year:1917,rating:4.9,visitors:601000,areakm:24464,desc:"Denali (20,310 ft) is the highest peak in North America. <strong>93% of the park is roadless</strong>—one road, open only to permitted buses beyond mile 15. Grizzly bears, moose, Dall sheep, wolves, and caribou are all visible from the single park road.",descZh:"德纳利峰（20,310英尺）是北美最高峰。<strong>93%的公园无路可通</strong>。园内公路超过15英里处仅对许可巴士开放。灰熊、驼鹿、道尔盘羊、狼和驯鹿均可从公路上观察到。"},
+{id:24,country:"US",name:"Glacier Bay",zh:"冰川湾国家公园",region:"AK",lat:58.666,lng:-136.900,year:1980,rating:4.8,visitors:75000,areakm:13287,desc:"One of the world's most dramatic examples of glacial retreat: just 250 years ago the entire bay was covered by a single massive glacier. Today 50 named glaciers descend from the peaks, including the massive <strong>Grand Pacific Glacier</strong>. UNESCO World Heritage Site.",descZh:"全球最戏剧化的冰川后退实例之一：仅250年前，整个海湾被一座巨大冰川覆盖。如今50座命名冰川俯冲而下，包括宏伟的<strong>大太平洋冰川</strong>。UNESCO世界遗产地。"},
+{id:25,country:"US",name:"Katmai",zh:"卡特迈国家公园",region:"AK",lat:58.500,lng:-154.000,year:1980,rating:4.8,visitors:75000,areakm:16565,desc:"Renowned worldwide for <strong>Brooks Falls</strong>, where brown bears gather every July to catch sockeye salmon leaping upstream. One of the world's highest concentrations of brown bears. The annual 'Fat Bear Week' contest has become a beloved global internet phenomenon.",descZh:"因<strong>布鲁克斯瀑布</strong>享誉全球——每年七月棕熊聚集捕食跃瀑红鲑鱼。年度\"胖熊周\"评选已成为广受欢迎的网络现象。"},
+{id:26,country:"US",name:"Kenai Fjords",zh:"基奈峡湾国家公园",region:"AK",lat:59.920,lng:-150.000,year:1980,rating:4.8,visitors:340000,areakm:2711,desc:"Named for dramatic glacier-carved fjords along the Gulf of Alaska. Dominated by the <strong>Harding Icefield</strong>, one of the largest in the U.S., feeding 40+ glaciers. Exit Glacier retreats visibly year by year—a dramatic climate record in ice.",descZh:"以阿拉斯加湾沿岸冰川雕刻的壮观峡湾命名。<strong>哈丁冰原</strong>是美国最大冰原之一，滋养40多座冰川。出口冰川每年可见明显后退，是气候变化的直观记录。"},
+{id:27,country:"US",name:"Wrangell-St. Elias",zh:"兰格尔-圣伊莱亚斯国家公园",region:"AK",lat:61.710,lng:-142.986,year:1980,rating:4.8,visitors:80000,areakm:53321,desc:"The largest national park in the United States—larger than Switzerland—with 13.2 million acres of pristine wilderness. Nine of the sixteen highest U.S. peaks are here, along with North America's largest collection of glaciers, including the 92-mile <strong>Bagley Icefield</strong>.",descZh:"美国最大的国家公园，面积超过整个瑞士，拥有1,320万英亩原始山地荒野。美国16座最高峰中的9座在此，以及北美最大冰川群，包括92英里长的<strong>贝格利冰原</strong>。"},
+{id:28,country:"US",name:"Biscayne",zh:"比斯坎国家公园",region:"FL",lat:25.482,lng:-80.408,year:1980,rating:4.5,visitors:700000,areakm:700,desc:"95% water, protecting the northern Florida Keys reef system including the third largest <strong>coral reef</strong> in the world. Four distinct ecosystems: Biscayne Bay, mangrove shoreline, barrier islands, and living reef.",descZh:"95%为水域，保护包括世界第三大<strong>珊瑚礁</strong>在内的佛罗里达礁岛群北端礁石系统。包含四种生态系统：比斯坎湾、红树林海岸、堤坝岛和活体珊瑚礁。"},
+{id:29,country:"US",name:"Dry Tortugas",zh:"干托尔图加斯国家公园",region:"FL",lat:24.629,lng:-82.873,year:1992,rating:4.9,visitors:73000,areakm:262,desc:"Accessible only by boat or seaplane, 70 miles west of Key West. At its center is <strong>Fort Jefferson</strong>, one of the largest brick structures in the Western Hemisphere, surrounded by some of the Atlantic's most spectacular coral reefs.",descZh:"距基韦斯特70英里，只能乘船或水上飞机到达。核心是<strong>杰斐逊堡</strong>，西半球最大砖砌建筑之一，周边水域拥有大西洋最壮观的珊瑚礁之一。"},
+{id:30,country:"US",name:"Carlsbad Caverns",zh:"卡尔斯巴德洞窟国家公园",region:"NM",lat:32.148,lng:-104.557,year:1930,rating:4.8,visitors:460000,areakm:189,desc:"Over 100 caves beneath the Chihuahuan Desert. The Big Room is one of North America's largest cave chambers. World-famous for its <strong>bat colony</strong>: hundreds of thousands of Brazilian free-tailed bats spiral out at dusk from May through October.",descZh:"奇瓦瓦沙漠地下100多个洞穴。大厅是北美最大洞穴厅之一。因每年5至10月傍晚的<strong>巴西游离尾蝠大迁徙</strong>举世闻名——数十万只蝙蝠螺旋飞出，壮观持续数小时。"},
+{id:31,country:"US",name:"Guadalupe Mountains",zh:"瓜达卢佩山国家公园",region:"TX",lat:31.923,lng:-104.871,year:1972,rating:4.6,visitors:195000,areakm:349,desc:"Contains the world's most extensive Permian fossil reef, formed 250 million years ago. <strong>Guadalupe Peak</strong> (8,749 ft) is Texas's highest point. McKittrick Canyon explodes with autumn color—one of the most unexpected sights in the Southwest.",descZh:"保存着世界最广泛的二叠纪化石礁，形成于2.5亿年前。<strong>瓜达卢佩峰</strong>（8,749英尺）是德克萨斯州最高点。麦基特里克峡谷秋叶变色，是西南部最出人意料的美景之一。"},
+{id:32,country:"US",name:"Big Bend",zh:"大弯国家公园",region:"TX",lat:29.128,lng:-103.243,year:1944,rating:4.8,visitors:581000,areakm:3242,desc:"Occupies the great bend of the Rio Grande in remote southwest Texas, bordering Mexico for 118 miles. The <strong>Chisos Mountains</strong> rise as an island of woodland in a sea of desert. Over 450 bird species—more than any other national park in the U.S.",descZh:"占据里奥格兰德河在西德克萨斯州的大拐弯，与墨西哥接壤118英里。<strong>奇索斯山脉</strong>是沙漠中的凉爽山林孤岛。超过450种鸟类记录，位居美国所有国家公园之首。"},
+{id:33,country:"US",name:"Saguaro",zh:"萨瓜罗国家公园",region:"AZ",lat:32.297,lng:-110.974,year:1994,rating:4.6,visitors:1200000,areakm:376,desc:"Two districts flanking Tucson protect the iconic Sonoran Desert and specifically the <strong>saguaro cactus</strong>—the largest cactus in the U.S., living over 150 years and growing to 40 feet. A keystone species for desert wildlife.",descZh:"分为东西两区拱卫图森市，保护标志性的索诺兰沙漠，尤其是<strong>巨人柱仙人掌</strong>——美国最大的仙人掌，可活150年以上，高达40英尺。"},
+{id:34,country:"US",name:"Petrified Forest",zh:"石化林国家公园",region:"AZ",lat:34.982,lng:-109.887,year:1962,rating:4.5,visitors:644000,areakm:895,desc:"World's largest concentration of petrified wood—225-million-year-old logs replaced by silica, preserved as brilliant multicolored quartz crystals. The <strong>Painted Desert</strong> along the northern edge glows lavender, red, orange, and pink.",descZh:"世界最大密度的硅化木——2.25亿年前的古树被富含硅的地下水缓慢替代，保存为绚丽的多彩石英晶体。公园北缘的<strong>彩绘沙漠</strong>以薰衣草、红色、橙色和粉红色条纹地貌令人过目难忘。"},
+{id:35,country:"US",name:"Mesa Verde",zh:"梅萨维德国家公园",region:"CO",lat:37.184,lng:-108.491,year:1906,rating:4.8,visitors:570000,areakm:212,desc:"UNESCO World Heritage Site preserving North America's most notable ancestral Puebloan cliff dwellings. <strong>Cliff Palace</strong> (150 rooms, 23 kivas) is the largest cliff dwelling on the continent, tucked into a sandstone alcove—inhabited 600–1300 CE.",descZh:"UNESCO世界遗产地，保存北美最著名的古代普韦布洛人悬崖居所。<strong>悬崖宫殿</strong>有150个房间和23个基瓦，是北美最大的悬崖居所，公元600至1300年间有人居住。"},
+{id:36,country:"US",name:"Black Canyon of the Gunnison",zh:"冈尼森黑峡谷国家公园",region:"CO",lat:38.575,lng:-107.742,year:1999,rating:4.8,visitors:437000,areakm:133,desc:"Some of the steepest cliffs in any U.S. national park. The Gunnison River drops 43 feet per mile, carving walls over 2,700 feet high. Certain sections receive <strong>only 33 minutes of direct sunlight daily</strong>. The Painted Wall (2,250 ft) is Colorado's tallest cliff.",descZh:"冈尼森河平均每英里下降43英尺，雕刻出高达2,700英尺的峡谷壁。某些地段<strong>每天只有33分钟</strong>的直射阳光。彩绘壁（2,250英尺）是科罗拉多州最高悬崖。"},
+{id:37,country:"US",name:"Great Sand Dunes",zh:"大沙丘国家公园",region:"CO",lat:37.733,lng:-105.594,year:2004,rating:4.7,visitors:592000,areakm:434,desc:"North America's tallest sand dunes (750+ feet) rise against the Sangre de Cristo Mountains. <strong>Medano Creek</strong> flows seasonally at the base, creating surge flow—pulsing waves of water—a beloved family activity each spring.",descZh:"北美最高沙丘（750英尺以上）在桑格雷德克里斯托山脉衬托下蔚为壮观。<strong>梅达诺溪</strong>春季在沙丘底部形成\"涌浪流\"，是深受家庭喜爱的嬉水活动。"},
+{id:38,country:"US",name:"Wind Cave",zh:"风洞国家公园",region:"SD",lat:43.556,lng:-103.478,year:1903,rating:4.6,visitors:614000,areakm:137,desc:"One of the longest and most complex caves in the world with 150+ miles of passages. Famous for rare <strong>boxwork</strong>—thin calcite blades in honeycomb patterns found in abundance nowhere else on Earth. Bison, elk, and black-footed ferrets roam the surface prairie.",descZh:"世界最长最复杂的洞穴之一，已探明超过150英里通道。以罕见的<strong>方格纹</strong>著称——薄方解石叶片形成蜂巢状图案，这种形态在其他洞穴中极为罕见。"},
+{id:39,country:"US",name:"Badlands",zh:"荒地国家公园",region:"SD",lat:43.855,lng:-102.340,year:1978,rating:4.7,visitors:1040000,areakm:982,desc:"An constantly eroding landscape of sharply carved spires, buttes, and pinnacles—eroding at roughly an inch per year. Contains one of the world's richest Oligocene fossil beds (23–34 million years ago) with <strong>saber-toothed cats, three-toed horses, and giant tortoises</strong>.",descZh:"不断侵蚀的奇石地貌，每年侵蚀约一英寸。拥有世界最丰富的奥利戈世哺乳动物化石床之一（2,300至3,400万年前），包含<strong>剑齿猫、三趾马和巨型陆龟</strong>。"},
+{id:40,country:"US",name:"Theodore Roosevelt",zh:"西奥多·罗斯福国家公园",region:"ND",lat:46.979,lng:-103.539,year:1978,rating:4.7,visitors:750000,areakm:285,desc:"Named for the president who found solace and inspiration in the North Dakota Badlands after his first wife's death. Preserves the Little Missouri Badlands and <strong>Elkhorn Ranch</strong>, site of Roosevelt's homestead. Wild bison, feral horses, elk, and bighorn sheep roam freely.",descZh:"以这位总统命名，他在丧妻后来到北达科他州荒地寻求慰藉。保护小密苏里荒地和罗斯福原牧场<strong>角叉牧场</strong>遗址。野牛、野马、麋鹿和大角羊自由漫步。"},
+{id:41,country:"US",name:"Voyageurs",zh:"沃雅格国家公园",region:"MN",lat:48.484,lng:-92.828,year:1975,rating:4.6,visitors:241000,areakm:883,desc:"A water-based park accessible primarily by boat or canoe. Named for <strong>French-Canadian voyageurs</strong> who paddled these waters in birch-bark canoes during the fur trade era. One of the best places in the lower 48 to see the northern lights.",descZh:"以水上活动为主的国家公园，以乘桦树皮独木舟进行毛皮贸易的<strong>法裔加拿大探险者</strong>命名。是美国本土观赏北极光的最佳地点之一。"},
+{id:42,country:"US",name:"Isle Royale",zh:"罗亚尔岛国家公园",region:"MI",lat:48.006,lng:-88.837,year:1940,rating:4.7,visitors:27000,areakm:2314,desc:"The least visited national park in the contiguous U.S., accessible only by ferry or seaplane to a remote Lake Superior island. Famous for the world's longest-running predator-prey study: <strong>wolves and moose</strong>, monitored continuously since 1958.",descZh:"美国本土游客最少的国家公园，只能乘渡船或水上飞机到达苏必利尔湖中的孤岛。因世界持续时间最长的捕食者-猎物研究著名：<strong>狼和驼鹿</strong>自1958年起持续监测。"},
+{id:43,country:"US",name:"Cuyahoga Valley",zh:"凯霍加谷国家公园",region:"OH",lat:41.281,lng:-81.568,year:2000,rating:4.6,visitors:2800000,areakm:133,desc:"Protects 33,000 acres along the Cuyahoga River between Akron and Cleveland. The <strong>Ohio & Erie Canal Towpath Trail</strong> is one of the Midwest's most popular multi-use trails. The Cuyahoga Valley Scenic Railroad offers historical narrated tours.",descZh:"沿凯霍加河保护33,000英亩土地。<strong>俄亥俄-伊利运河船道步道</strong>是中西部最受欢迎的多用途步道之一。凯霍加谷观光铁路提供历史主题解说游览。"},
+{id:44,country:"US",name:"Indiana Dunes",zh:"印第安纳沙丘国家公园",region:"IN",lat:41.653,lng:-87.052,year:2019,rating:4.5,visitors:2100000,areakm:62,desc:"Upgraded to national park status in 2019, protecting 15 miles of Lake Michigan shoreline and over 1,100 vascular plant species. Botanist Henry Cowles' study of <strong>plant succession on the dunes</strong> here in the 1890s founded the science of ecology.",descZh:"2019年升格为国家公园，保护密歇根湖沿岸15英里，拥有超过1,100种维管植物。1890年代植物学家亨利·考尔斯在此研究的<strong>沙丘植物演替</strong>奠定了生态学科学的基础。"},
+{id:45,country:"US",name:"Mammoth Cave",zh:"猛犸洞穴国家公园",region:"KY",lat:37.188,lng:-86.100,year:1941,rating:4.7,visitors:600000,areakm:214,desc:"The longest known cave system in the world with over 420 miles of mapped passages. The cave was mined for saltpeter during the War of 1812. The <strong>Frozen Niagara</strong> stalactite formation and the Rotunda (140 ft high) are among the world's most spectacular cave features.",descZh:"世界上已知最长的洞穴系统，已探明超过420英里通道。1812年战争期间曾开采硝石。<strong>冰冻尼亚加拉</strong>钟乳石群和旋转厅（高140英尺）是世界最壮观的洞穴景观之一。"},
+{id:46,country:"US",name:"New River Gorge",zh:"新河峡谷国家公园",region:"WV",lat:37.868,lng:-80.998,year:2020,rating:4.8,visitors:1630000,areakm:295,desc:"America's newest national park (December 2020). The New River is one of <strong>North America's oldest rivers</strong>, predating the Appalachian Mountains. Bridge Day each October draws BASE jumpers leaping from the 876-foot bridge. Excellent Class V whitewater rafting.",descZh:"美国最新的国家公园（2020年12月）。新河是<strong>北美最古老的河流之一</strong>，比阿巴拉契亚山脉还要古老。每年十月桥日活动吸引BASE跳伞者从876英尺高的大桥一跃而下。"},
+{id:47,country:"US",name:"Capitol Reef",zh:"国会礁国家公园",region:"UT",lat:38.200,lng:-111.214,year:1971,rating:4.7,visitors:1220000,areakm:979,desc:"Centered on the <strong>Waterpocket Fold</strong>—a 100-mile warp in the earth's crust exposing a rainbow of geological eras. The historic Fruita orchard, planted by Mormon pioneers, still yields apples, peaches, and cherries that visitors can pick in season.",descZh:"以<strong>水袋折叠</strong>为核心——地壳中100英里长的弯曲褶皱，呈现地质历史的彩虹。弗鲁塔历史果园由摩门垦殖者种植，游客至今可在季节采摘苹果、桃子和梨。"},
+{id:48,country:"US",name:"Channel Islands",zh:"海峡群岛国家公园",region:"CA",lat:34.007,lng:-119.779,year:1980,rating:4.7,visitors:490000,areakm:1010,desc:"Protects five of California's eight Channel Islands—sometimes called the '<strong>Galápagos of North America</strong>' for its extraordinary endemism. Island fox, pygmy mammoth fossils, blue whales, and vast kelp forests thrive here.",descZh:"保护加州八个海峡岛屿中的五个，有时被称为\"<strong>北美的加拉帕戈斯</strong>\"。岛屿狐、侏儒猛犸象化石、蓝鲸和广阔海藻森林共同繁盛。"},
+{id:49,country:"US",name:"Redwood",zh:"红木国家公园",region:"CA",lat:41.213,lng:-124.005,year:1968,rating:4.8,visitors:460000,areakm:562,desc:"Protects the tallest trees on Earth—coastal redwoods that can exceed 380 feet and live 2,000 years. The parks contain ~45% of all remaining old-growth coastal redwood forest. The tallest known living tree, <strong>Hyperion</strong> (380.3 ft), hides in an undisclosed location.",descZh:"保护地球上最高的树木——海岸红木，高度可超380英尺，寿命超2,000年。保存约45%的现存老龄海岸红木林。已知最高活树<strong>亥伯龙</strong>（380.3英尺），确切位置保密。"},
+{id:50,country:"US",name:"Lassen Volcanic",zh:"拉森火山国家公园",region:"CA",lat:40.498,lng:-121.508,year:1916,rating:4.7,visitors:544000,areakm:431,desc:"Contains all four types of volcanoes—plug dome, shield, cinder cone, and composite—a unique geological laboratory. <strong>Lassen Peak</strong>, the world's largest plug dome, last erupted in 1915. Hydrothermal areas bubble and steam like a smaller Yellowstone.",descZh:"包含所有四种类型的火山——堵塞穹丘、盾状火山、火山渣锥和复式火山，是独特的地质实验室。<strong>拉森峰</strong>是世界最大堵塞穹丘火山，最后喷发于1915年。"},
+{id:51,country:"US",name:"Pinnacles",zh:"尖石国家公园",region:"CA",lat:36.491,lng:-121.183,year:2013,rating:4.6,visitors:250000,areakm:108,desc:"Protects an ancient volcano transported 195 miles by the San Andreas Fault. Home to one of the few places with <strong>talus caves</strong>—formed by collapsed boulders—which serve as critical roost sites for California condors. One of the most successful condor reintroduction programs.",descZh:"保护沿圣安德烈亚斯断层移动了195英里的古火山侵蚀残余。是少数几个拥有<strong>砾石洞</strong>的地方之一，是濒危加州神鹫的关键栖息地，神鹫重引入计划成果卓著。"},
+{id:52,country:"US",name:"North Cascades",zh:"北喀斯喀特国家公园",region:"WA",lat:48.772,lng:-121.299,year:1968,rating:4.8,visitors:38000,areakm:2042,desc:"The 'American Alps'—more glaciers than any other area in the lower 48 outside Alaska. Yet one of the <strong>least visited national parks</strong> in the contiguous U.S. Wolves have returned naturally in recent years, and ancient forests of Douglas fir and western red cedar thrive.",descZh:"被誉为\"美洲阿尔卑斯\"，拥有阿拉斯加以外美国本土最多的冰川，却是<strong>游客最少的国家公园之一</strong>。近年来狼群已自然回迁至公园，古老的道格拉斯冷杉和西部红雪松林郁郁葱葱。"},
+{id:53,country:"US",name:"Congaree",zh:"康加里国家公园",region:"SC",lat:33.795,lng:-80.782,year:2003,rating:4.6,visitors:165000,areakm:107,desc:"Protects the largest old-growth bottomland hardwood forest in the United States. The park holds multiple <strong>state and national champion trees</strong>. In late spring, synchronous fireflies flash in coordinated patterns—a natural spectacle drawing visitors worldwide.",descZh:"保护美国最大的老龄低地硬木林，持有多项<strong>州和全国冠军树</strong>称号。每年春末萤火虫同步闪光的自然奇观吸引全球游客前往观赏。"},
+{id:54,country:"US",name:"Hot Springs",zh:"热泉国家公园",region:"AR",lat:34.522,lng:-93.054,year:1921,rating:4.5,visitors:1540000,areakm:22,desc:"One of the oldest and smallest national parks, protecting 143°F thermal springs—a federal reserve since 1832. The famous <strong>Bathhouse Row</strong>—eight ornate buildings built 1892–1923—once attracted presidents, Al Capone, and baseball players seeking the waters.",descZh:"历史最悠久、面积最小的国家公园之一，保护143°F天然温泉，1832年便成为联邦保护地。著名的<strong>浴场街</strong>上八座华丽浴场曾吸引总统、黑帮和棒球运动员前来\"泡温泉\"。"},
+{id:55,country:"US",name:"Gateway Arch",zh:"门户拱门国家公园",region:"MO",lat:38.625,lng:-90.185,year:2018,rating:4.5,visitors:2400000,areakm:0.4,desc:"Dominated by the <strong>Gateway Arch</strong>—630 feet, the tallest man-made monument and tallest arch in the world. Designed by Eero Saarinen, completed 1965. Visitors ride tram cars inside the hollow stainless steel structure to an observation deck at the top.",descZh:"以<strong>门户拱门</strong>为主体——高630英尺，是世界最高人工纪念碑和最高拱形建筑。由埃罗·沙里宁设计，1965年竣工。游客可乘吊车到达顶部观景台。"},
+{id:56,country:"US",name:"Haleakalā",zh:"哈莱阿卡拉国家公园",region:"HI",lat:20.720,lng:-156.155,year:1961,rating:4.8,visitors:1000000,areakm:135,desc:"'House of the Sun' in Hawaiian, protecting the dormant volcano forming over 75% of Maui. The massive <strong>Haleakalā Crater</strong> (7 miles long, 2 miles wide) is one of the most otherworldly landscapes in the parks system. The silversword plant lives only here, blooming once before dying.",descZh:"夏威夷语意为\"太阳之屋\"，保护构成毛伊岛75%以上的休眠火山。宏大的<strong>哈莱阿卡拉火山口</strong>（长7英里、宽2英里）是公园系统中最超现实的景观之一。银剑草只生长在此，一生只开一次花便死去。"},
+{id:57,country:"US",name:"Virgin Islands",zh:"维尔京群岛国家公园",region:"VI",lat:18.345,lng:-64.785,year:1956,rating:4.8,visitors:146000,areakm:60,desc:"Encompasses about two-thirds of St. John in the U.S. Virgin Islands. Turquoise waters, white sand beaches, and coral reefs make it one of the most scenically beautiful parks. <strong>Trunk Bay</strong>'s underwater snorkeling trail is consistently ranked among the world's most beautiful beaches.",descZh:"涵盖美属维尔京群岛圣约翰岛的约三分之二。以碧绿海水、白色沙滩和珊瑚礁成为公园系统中景色最迷人的公园之一。<strong>特朗克湾</strong>的水下浮潜步道持续被评为世界最美海滩之一。"},
+{id:58,country:"US",name:"American Samoa",zh:"美属萨摩亚国家公园",region:"AS",lat:-14.259,lng:-170.712,year:1988,rating:4.7,visitors:8000,areakm:33,desc:"The only U.S. national park south of the equator, protecting a unique tropical ecosystem across three islands. The park is notable for its cultural partnership—land is leased from local villages rather than federally owned. <strong>Flying foxes</strong> (large fruit bats) are the only native land mammals.",descZh:"美国唯一位于赤道以南的国家公园，保护三个岛屿的独特热带生态系统。公园土地由当地村庄租赁而非联邦所有，是公园系统中独一无二的安排。<strong>果蝠</strong>是当地唯一的本地陆地哺乳动物。"},
+{id:59,country:"US",name:"Gates of the Arctic",zh:"北极之门国家公园",region:"AK",lat:67.776,lng:-153.292,year:1980,rating:4.8,visitors:12000,areakm:30448,desc:"The northernmost U.S. national park, lying entirely above the Arctic Circle with no roads, trails, or facilities—accessible only by bush plane. Named by explorer Robert Marshall in 1930 for two peaks he saw as the <strong>'gateway to the Arctic'</strong>. Caribou migrations of hundreds of thousands pass through.",descZh:"美国最北端的国家公园，完全位于北极圈以上，没有公路、步道或设施，只能乘小型飞机进入。1930年由探险家罗伯特·马歇尔命名，他将两座山峰视为<strong>\"进入北极的门户\"</strong>。数十万头驯鹿大迁徙途经此地。"},
+{id:60,country:"US",name:"Great Basin",zh:"大盆地国家公园",region:"NV",lat:38.920,lng:-114.213,year:1986,rating:4.7,visitors:131000,areakm:312,desc:"One of the most underrated parks in the system. Its centerpiece is <strong>Lehman Caves</strong>, adorned with rare shield formations found in few caves worldwide. Wheeler Peak (13,063 ft) supports one of the southernmost ancient bristlecone pine groves—trees up to 5,000 years old.",descZh:"最被低估的国家公园之一。核心是<strong>雷曼洞穴</strong>，点缀着罕见的盾形钟乳石。惠勒峰（13,063英尺）山坡上生长着地球上最南端的古老刺果松林——树龄高达5,000年。"},
+{id:61,country:"US",name:"White Sands",zh:"白沙国家公园",region:"NM",lat:32.787,lng:-106.326,year:2019,rating:4.8,visitors:836000,areakm:592,desc:"Protects the largest gypsum dunefield on Earth—<strong>275 square miles of brilliant white dunes</strong>. Unlike quartz sand, gypsum doesn't absorb solar radiation, so the dunes stay cool. Several species have evolved pure-white camouflage coloration, including the bleached earless lizard.",descZh:"保护着地球上最大的石膏沙丘群——<strong>275平方英里的洁白沙丘</strong>。与石英沙不同，石膏不吸收太阳辐射，因此沙丘即便在夏季也保持凉爽。几种地方物种演化出纯白色保护色。"},
+{id:62,country:"US",name:"Kobuk Valley",zh:"科布克谷国家公园",region:"AK",lat:67.346,lng:-159.124,year:1980,rating:4.7,visitors:15000,areakm:7084,desc:"One of the most remote parks in the system—no roads, trails, or facilities, accessible only by small aircraft. Centerpiece is the <strong>Great Kobuk Sand Dunes</strong>, active Arctic dunes rising 100 feet, formed from glacially ground quartz. The Kobuk River corridor has been inhabited for 12,500 years.",descZh:"公园系统中最偏远的公园之一，无公路、步道或设施，只能乘小型飞机进入。核心是<strong>大科布克沙丘</strong>——高达100英尺的北极活动沙丘，由冰川研磨石英砂堆积而成。科布克河廊道已有12,500年的人类居住历史。"},
+{id:63,country:"US",name:"Lake Clark",zh:"湖克拉克国家公园",region:"AK",lat:60.413,lng:-153.554,year:1980,rating:4.8,visitors:20000,areakm:10602,desc:"A park of extraordinary landscape diversity—active volcanoes, glaciers, wild rivers, alpine tundra, and a dramatic Cook Inlet coastline where brown bears gather to fish for sockeye salmon. <strong>Mount Redoubt</strong>, an active stratovolcano, erupted as recently as 2009.",descZh:"涵盖令人惊叹的多样景观——活火山、冰川、激流、高山冻原和库克湾沿岸海岸线，每年夏天棕熊聚集捕食红鲑鱼。活成层火山<strong>雷杜布特山</strong>最近一次喷发于2009年。"},
+
+// ── CANADA (48) ──────────────────────────────
+// BC = British Columbia, AB = Alberta, SK = Saskatchewan, MB = Manitoba
+// ON = Ontario, QC = Quebec, NB = New Brunswick, NS = Nova Scotia
+// PE = Prince Edward Island, NL = Newfoundland & Labrador
+// YT = Yukon, NT = Northwest Territories, NU = Nunavut
+{id:101,country:"CA",name:"Banff",zh:"班夫国家公园",region:"AB",lat:51.496,lng:-115.928,year:1885,rating:4.9,visitors:4130000,areakm:6641,desc:"Canada's first and most-visited national park, established in 1885 around the Cave and Basin Hot Springs. The <strong>Icefields Parkway</strong>—93 miles of highway between Banff and Jasper—is considered one of the world's most scenic drives. Lake Louise and Moraine Lake are among the most photographed landscapes in North America.",descZh:"加拿大第一个也是访客最多的国家公园（1885年），围绕洞穴和盆地温泉建立。<strong>冰原大道</strong>——班夫至贾斯珀93英里公路——被认为是世界最美公路之一。露易丝湖和冰碛湖是北美最具代表性的摄影胜地。"},
+{id:102,country:"CA",name:"Jasper",zh:"贾斯珀国家公园",region:"AB",lat:52.873,lng:-117.954,year:1907,rating:4.8,visitors:2415000,areakm:10878,desc:"Canada's largest Rocky Mountain park and part of the UNESCO Canadian Rocky Mountain Parks World Heritage Site. The <strong>Columbia Icefield</strong>—one of the largest non-polar ice masses in North America—feeds six major glaciers. Home to the world's second-largest Dark Sky Preserve.",descZh:"加拿大最大的落基山公园，是UNESCO加拿大落基山公园群世界遗产地的组成部分。<strong>哥伦比亚冰原</strong>是北美最大的非极地冰体之一，滋养六条主要冰川。是世界第二大暗天空保护区。"},
+{id:103,country:"CA",name:"Yoho",zh:"幽鹤国家公园",region:"BC",lat:51.500,lng:-116.500,year:1886,rating:4.7,visitors:574000,areakm:1313,desc:"'Yoho' is a Cree exclamation of awe—fitting for a park of dramatic waterfalls, towering peaks, and the world-famous <strong>Burgess Shale</strong>. This 508-million-year-old fossil site preserves soft-bodied marine creatures with extraordinary completeness, revolutionizing understanding of animal evolution.",descZh:"\"幽鹤\"是克里语中惊叹词——完全符合这座拥有壮观瀑布、高耸山峰的公园。举世闻名的<strong>伯吉斯页岩</strong>（5.08亿年前）保存着软体海洋生物，彻底改变了人类对动物进化的认知。"},
+{id:104,country:"CA",name:"Kootenay",zh:"库特尼国家公园",region:"BC",lat:50.883,lng:-116.050,year:1920,rating:4.6,visitors:574000,areakm:1406,desc:"Part of the Canadian Rocky Mountain Parks UNESCO World Heritage Site, bordering Banff to the east and Yoho to the north. Famous for the <strong>Radium Hot Springs</strong> in the park's southern end—mineral hot springs surrounded by canyon walls. Marble Canyon's turquoise waters are another highlight.",descZh:"UNESCO加拿大落基山公园群世界遗产地组成部分，东邻班夫、北邻幽鹤。以公园南端的<strong>镭温泉</strong>著称——峡谷峭壁环绕的矿泉温泉。大理石峡谷的碧绿水色是另一大亮点。"},
+{id:105,country:"CA",name:"Glacier",zh:"冰川国家公园（加拿大）",region:"BC",lat:51.248,lng:-117.523,year:1886,rating:4.7,visitors:775000,areakm:1349,desc:"Representative of the Columbia Mountains ecosystem, this park includes the breathtaking <strong>Illecillewaet Neve</strong> glacier, accessible on foot. Famous for its black and grizzly bears, which forage on the park's avalanche slopes. Rogers Pass through the park was a major engineering feat of the Canadian Pacific Railway.",descZh:"代表哥伦比亚山脉生态系统，包含可徒步到达的<strong>伊利斯勒瓦特雪原</strong>冰川。以在雪崩斜坡上觅食的黑熊和灰熊著称。穿越公园的罗杰斯山口是加拿大太平洋铁路的重大工程成就。"},
+{id:106,country:"CA",name:"Mount Revelstoke",zh:"雷弗尔斯托克山国家公园",region:"BC",lat:51.083,lng:-118.067,year:1914,rating:4.5,visitors:775000,areakm:260,desc:"A park of dramatic contrasts—from old-growth rainforest valleys to alpine meadows and barren rocky ridges. The <strong>Summit Road</strong> (16 miles) climbs to the alpine zone, where the Meadows in the Sky trail winds through wildflower meadows with panoramic views of the Columbia River valley.",descZh:"对比鲜明的景观——从老龄雨林山谷到高山草甸和岩脊。<strong>山顶路</strong>（16英里）攀升至高山地带，天空草地步道穿越野花草甸，可俯瞰哥伦比亚河谷全景。"},
+{id:107,country:"CA",name:"Gulf Islands",zh:"海湾群岛国家公园保留地",region:"BC",lat:48.750,lng:-123.200,year:2003,rating:4.5,visitors:28000,areakm:36,desc:"A national park reserve protecting ecosystems representative of the Strait of Georgia Lowlands—the mildest climate zone in Canada. Scattered across 6 km² of land and 26 km² of marine area, the islands support Garry oak ecosystems, rare on Canada's Pacific coast, and rich marine biodiversity.",descZh:"保护乔治亚海峡低地生态系统的国家公园保留地——加拿大气候最温和的地带。分布于6平方公里陆地和26平方公里海域，岛屿支撑着加里橡树生态系统（在加拿大太平洋海岸十分罕见）和丰富的海洋生物多样性。"},
+{id:108,country:"CA",name:"Gwaii Haanas",zh:"瓜伊哈纳斯国家公园保留地",region:"BC",lat:52.383,lng:-131.467,year:1988,rating:4.9,visitors:2651,areakm:1496,desc:"Remote and extraordinary, Gwaii Haanas ('Islands of Wonder' in Haida) protects the southern Haida Gwaii archipelago—one of Canada's most biologically unique areas. The <strong>SGang Gwaay (Anthony Island)</strong> UNESCO World Heritage Site contains 32 mortuary and memorial poles—the finest collection of standing totem poles in the world.",descZh:"偏远而非凡，瓜伊哈纳斯（海达语意为\"美丽的群岛\"）保护哈伊达瓜伊群岛南部——加拿大生物多样性最独特的地区之一。<strong>SGang Gwaay（安东尼岛）</strong>UNESCO世界遗产地保存着32根殡葬柱和纪念柱——世界最佳的立式图腾柱收藏。"},
+{id:109,country:"CA",name:"Elk Island",zh:"麋鹿岛国家公园",region:"AB",lat:53.617,lng:-112.867,year:1913,rating:4.5,visitors:409000,areakm:194,desc:"The only national park in Canada completely surrounded by a fence—originally created to protect rapidly disappearing elk herds in 1906. Today a critical sanctuary for <strong>plains bison and wood bison</strong> conservation, having contributed animals to restoration programs across North America. A certified Dark Sky Preserve.",descZh:"加拿大唯一完全被围栏包围的国家公园，最初于1906年为保护迅速减少的麋鹿群而设立。如今是<strong>草原野牛和林地野牛</strong>保护的重要庇护所，已向北美各地的恢复项目提供动物。认证暗天空保护区。"},
+{id:110,country:"CA",name:"Wood Buffalo",zh:"伍德布法罗国家公园",region:"AB/NT",lat:59.170,lng:-113.580,year:1922,rating:4.7,visitors:5000,areakm:44807,desc:"The largest national park in Canada—and one of the largest in the world, larger than Switzerland. UNESCO World Heritage Site. Protects the last natural breeding grounds of the <strong>whooping crane</strong> (from 16 birds in 1941 to 500+ today) and the world's largest herd of free-roaming bison. Also the world's largest Dark Sky Preserve.",descZh:"加拿大最大的国家公园，也是世界最大之一，面积超过瑞士。UNESCO世界遗产地。保护<strong>美洲鹤</strong>最后的天然繁殖地（从1941年的16只恢复到今天的500多只）和世界最大的自由漫游野牛群。也是世界最大的暗天空保护区。"},
+{id:111,country:"CA",name:"Prince Albert",zh:"阿尔伯特王子国家公园",region:"SK",lat:53.900,lng:-106.100,year:1927,rating:4.5,visitors:200000,areakm:3875,desc:"Located in the transition zone between boreal forest and aspen parkland in central Saskatchewan. Famous for being the adopted home of <strong>Grey Owl</strong> (Archibald Belaney), the celebrated early conservationist who championed beaver and wildlife protection. His cabin and grave are accessible by canoe on Ajawaan Lake.",descZh:"位于萨斯喀彻温省中部北方森林与白杨林的过渡地带。因成为著名早期环保人士<strong>灰枭</strong>（阿奇博尔德·贝拉尼）的家园而闻名——他致力于推动海狸和野生动物保护。他的小屋和墓地可通过独木舟在阿贾万湖上到达。"},
+{id:112,country:"CA",name:"Riding Mountain",zh:"骑山国家公园",region:"MB",lat:50.667,lng:-99.967,year:1929,rating:4.5,visitors:340000,areakm:2973,desc:"Rising dramatically from the Manitoba prairie, Riding Mountain shelters a diverse ecosystem at the crossroads of three biomes—boreal forest, aspen parkland, and fescue prairie. Home to <strong>grey wolves, elk, black bears, and bison</strong>. The historic resort town of Wasagaming sits on the shores of Clear Lake.",descZh:"从曼尼托巴省草原骤然升起，骑山国家公园在三种生物群落的交汇处——北方森林、白杨林地和羊茅草原——孕育着多样的生态系统。栖息着<strong>灰狼、麋鹿、黑熊和野牛</strong>。历史度假小镇瓦萨加明坐落在清湖畔。"},
+{id:113,country:"CA",name:"Grasslands",zh:"草原国家公园",region:"SK",lat:49.200,lng:-107.717,year:1981,rating:4.6,visitors:20000,areakm:907,desc:"One of Canada's least visited parks, protecting one of the last remaining pieces of North America's mixed-grass prairie ecosystem. The only place in Canada where <strong>black-tailed prairie dogs</strong> still exist. Extraordinary fossil beds include the first Tyrannosaurus rex skull found in Canada. Exceptionally dark skies for stargazing.",descZh:"加拿大游客最少的公园之一，保护北美混合草原生态系统的最后残余之一。加拿大唯一仍有<strong>黑尾草原犬鼠</strong>存在的地方。非凡的化石床中包括加拿大发现的第一个霸王龙头骨。极为暗黑的天空是绝佳的观星之地。"},
+{id:114,country:"CA",name:"Wapusk",zh:"瓦普斯克国家公园",region:"MB",lat:57.600,lng:-93.500,year:1997,rating:4.7,visitors:500,areakm:11475,desc:"One of the world's largest known polar bear denning areas, protecting the most accessible <strong>polar bear maternity denning habitat</strong> in the world. Each autumn, polar bears gather near Churchill waiting for Hudson Bay to freeze. The park also protects extensive subarctic wetlands critical to millions of migratory birds.",descZh:"世界上已知最大的北极熊育幼地之一，保护着世界上可进入性最强的<strong>北极熊母熊育幼栖息地</strong>。每年秋天，北极熊聚集在丘吉尔附近等待哈德逊湾结冰。公园还保护着对数百万候鸟至关重要的广阔亚北极湿地。"},
+{id:115,country:"CA",name:"Georgian Bay Islands",zh:"乔治亚湾群岛国家公园",region:"ON",lat:44.883,lng:-79.867,year:1930,rating:4.4,visitors:27000,areakm:14,desc:"Comprising 59 islands and approximately 90 islets along the southeast shore of Georgian Bay. Beausoleil Island, the largest, straddles the transition between the <strong>Canadian Shield and the Great Lakes–St. Lawrence forest</strong>. The park is a key staging area for monarch butterfly migration each fall.",descZh:"由乔治亚湾东南岸的59个岛屿和约90个小岛组成。最大的博索莱尔岛横跨<strong>加拿大地盾与五大湖-圣劳伦斯森林</strong>的过渡地带。公园是每年秋季帝王蝶迁徙的重要集结地。"},
+{id:116,country:"CA",name:"Bruce Peninsula",zh:"布鲁斯半岛国家公园",region:"ON",lat:45.233,lng:-81.617,year:1987,rating:4.6,visitors:460000,areakm:154,desc:"Formed from lands previously designated as Cyprus Lake Provincial Park, the park protects the southern section of the Niagara Escarpment—a UNESCO World Biosphere Reserve. Famous for the <strong>Grotto</strong>, a stunning sea cave at the base of 100-foot dolomite cliffs on Georgian Bay.",descZh:"由原来的塞浦路斯湖省立公园用地建立，保护尼亚加拉悬崖的南段——UNESCO世界生物圈保护区。以<strong>石窟</strong>著称——一个位于乔治亚湾100英尺白云岩峭壁底部的令人叹为观止的海蚀洞。"},
+{id:117,country:"CA",name:"Point Pelee",zh:"皮利角国家公园",region:"ON",lat:41.950,lng:-82.517,year:1918,rating:4.6,visitors:250000,areakm:15,desc:"Canada's southernmost mainland point and one of its smallest parks, but world-famous as a premier <strong>bird migration hotspot</strong>. Over 370 bird species have been recorded, and during spring migration, exhausted songbirds concentrate on the Point by the thousands. Also a critical monarch butterfly migration site in autumn.",descZh:"加拿大大陆最南端，也是最小的公园之一，但以顶级<strong>鸟类迁徙热点</strong>而享誉世界。已记录超过370种鸟类，春季迁徙期间，数以千计的疲惫鸣禽集聚于此。也是秋季帝王蝶迁徙的重要中转站。"},
+{id:118,country:"CA",name:"Thousand Islands",zh:"千岛国家公园",region:"ON",lat:44.383,lng:-76.150,year:1904,rating:4.5,visitors:400000,areakm:24,desc:"Comprises 26 islands and about 90 islets scattered for 80 km along the St. Lawrence River from Brockville to Kingston. The park protects the remarkable <strong>Thousand Islands</strong> landscape where the Canadian Shield meets the St. Lawrence River lowlands. An ecologically unique transition zone between two major biomes.",descZh:"由沿圣劳伦斯河布罗克维尔至金斯顿80公里范围内散布的26个岛屿和约90个小岛组成。保护着<strong>千岛</strong>这一加拿大地盾与圣劳伦斯河低地交汇的独特景观。"},
+{id:119,country:"CA",name:"La Mauricie",zh:"莫里斯国家公园",nameFr:"Parc national de la Mauricie",region:"QC",lat:46.800,lng:-72.967,year:1970,rating:4.6,visitors:279000,areakm:536,desc:"Located north of Shawinigan, between the Saint-Maurice and Matawin Rivers in the Laurentian Highlands. Representative of the <strong>Canadian Shield's lake-studded boreal forest</strong>. Canoe-camping on the park's 150+ lakes and rivers is the quintessential experience; the fall foliage display is exceptional.",descZh:"位于沙维尼根市北部，夹于圣莫里斯河和马塔万河之间的劳伦先高地。代表<strong>加拿大地盾湖泊密布的北方森林</strong>。在公园150多个湖泊和河流上独木舟野营是最经典的体验；秋天的叶色尤为壮观。"},
+{id:120,country:"CA",name:"Forillon",zh:"福里永国家公园",nameFr:"Parc national Forillon",region:"QC",lat:48.900,lng:-64.350,year:1970,rating:4.7,visitors:164000,areakm:245,desc:"On the tip of the Gaspé Peninsula, where the Appalachian Mountains meet the Gulf of St. Lawrence. The park's dramatic limestone cliffs are home to thousands of nesting seabirds including <strong>gannets, razorbills, and common murres</strong>. Whale watching is exceptional—blue, fin, minke, and humpback whales are regularly sighted.",descZh:"位于加斯佩半岛尖端，阿巴拉契亚山脉在此与圣劳伦斯湾相遇。公园戏剧性的石灰岩悬崖是数千只筑巢海鸟的家园，包括<strong>塘鹅、小海雀和普通海鸦</strong>。观鲸体验绝佳——蓝鲸、长须鲸、小须鲸和座头鲸经常出没。"},
+{id:121,country:"CA",name:"Mingan Archipelago",zh:"明甘群岛国家公园保留地",nameFr:"Réserve de parc national de l'Archipel-de-Mingan",region:"QC",lat:50.217,lng:-63.167,year:1984,rating:4.7,visitors:44000,areakm:151,desc:"Located along the Gulf of St. Lawrence's north shore, the park consists of the Mingan Archipelago—40+ islands of striking <strong>limestone monoliths</strong>, naturally sculpted into mushroom and flowerpot shapes. One of the largest concentrations of monoliths in Canada. Critical habitat for blue whales, puffins, and Arctic terns.",descZh:"沿圣劳伦斯湾北岸分布，公园由明甘群岛组成——40多个岛屿上矗立着引人注目的<strong>石灰岩巨石</strong>，天然雕刻成蘑菇和花盆形状。加拿大最大的巨石聚集地之一。蓝鲸、海鹦和北极燕鸥的重要栖息地。"},
+{id:122,country:"CA",name:"Akami-Uapishku-KakKasuak-Mealy Mountains",zh:"米利山国家公园保留地",region:"NL",lat:53.400,lng:-59.367,year:2015,rating:4.6,visitors:500,areakm:10700,desc:"One of Canada's newest and most remote national park reserves, protecting a vast wild landscape on Labrador's Atlantic coast. The park encompasses the glacially-carved Mealy Mountains, the Eagle River—one of Canada's finest <strong>Atlantic salmon</strong> rivers—and coastal habitats supporting woodland caribou and numerous raptors.",descZh:"加拿大最新、最偏远的国家公园保留地之一，保护拉布拉多大西洋海岸广阔的野生景观。公园涵盖冰川雕刻的米利山、伊格尔河（加拿大最优秀的<strong>大西洋鲑鱼</strong>河流之一），以及支持林地驯鹿和众多猛禽的海岸栖息地。"},
+{id:123,country:"CA",name:"Gros Morne",zh:"格罗斯莫讷国家公园",region:"NL",lat:49.683,lng:-57.733,year:1973,rating:4.9,visitors:300000,areakm:1805,desc:"A UNESCO World Heritage Site for its exceptional exposed geology. The <strong>Tablelands</strong> are a slab of Earth's mantle pushed to the surface—a toxic, Mars-like landscape of peridotite rock where virtually nothing grows. The park also protects pristine fjords, waterfalls, and the Long Range Mountains.",descZh:"因其卓越的裸露地质而成为UNESCO世界遗产地。<strong>高台地</strong>是地球地幔被推至地表的一块岩层——由橄榄岩构成的有毒、类火星景观，几乎寸草不生。公园还保护着原始峡湾、瀑布和长岭山脉。"},
+{id:124,country:"CA",name:"Terra Nova",zh:"特拉诺瓦国家公园",region:"NL",lat:48.550,lng:-54.017,year:1957,rating:4.5,visitors:120000,areakm:400,desc:"Newfoundland's first national park, protecting a rugged interface of the Canadian Shield with the Atlantic Ocean. Deep fjords, boreal forest, and coastal bogs create a landscape of brooding beauty. <strong>Whales, bald eagles, black bears, and moose</strong> are frequently encountered. Newman Sound is the park's centerpiece.",descZh:"纽芬兰第一个国家公园，保护加拿大地盾与大西洋的粗犷交汇地带。深邃峡湾、北方森林和海岸沼泽构成阴郁之美的景观。<strong>鲸鱼、白头鹰、黑熊和驼鹿</strong>频繁出没。纽曼湾是公园的核心。"},
+{id:125,country:"CA",name:"Cape Breton Highlands",zh:"布雷顿角高地国家公园",region:"NS",lat:46.717,lng:-60.667,year:1936,rating:4.7,visitors:277000,areakm:949,desc:"Atlantic Canada's oldest national park features a stunning mix of Acadian and boreal forest environments, deep river canyons, and rugged Atlantic coastline. The <strong>Cabot Trail</strong>—a 185-mile scenic loop through and around the park—is one of the world's most celebrated coastal drives, particularly spectacular in fall foliage.",descZh:"大西洋加拿大最古老的国家公园，拥有阿卡迪亚和北方森林环境、深邃河流峡谷和粗犷大西洋海岸线的精彩组合。<strong>卡博特步道</strong>——穿越和环绕公园的185英里景观公路——是世界最著名的海岸公路之一，秋天叶色期间尤为壮观。"},
+{id:126,country:"CA",name:"Kejimkujik",zh:"凯吉穆库吉克国家公园",region:"NS",lat:44.400,lng:-65.217,year:1967,rating:4.5,visitors:75000,areakm:404,desc:"An ancient Mi'kmaw homeland, the lake-studded interior of Nova Scotia's South Shore. Famous for <strong>Mi'kmaw petroglyphs</strong>—pictographs carved into slate outcroppings—representing one of the finest collections of Indigenous rock art in eastern North America. Also hosts a separate Seaside Adjunct on Nova Scotia's remote Atlantic coast.",descZh:"米克马人的古老家园，位于新斯科舍省南岸湖泊密布的内陆地区。以<strong>米克马人岩画</strong>著称——刻在板岩露头上的象形文字——是北美东部最精美的原住民岩石艺术收藏之一。公园还在新斯科舍省偏远大西洋海岸设有独立的海边附属区。"},
+{id:127,country:"CA",name:"Fundy",zh:"芬迪国家公园",region:"NB",lat:45.600,lng:-64.950,year:1948,rating:4.7,visitors:304000,areakm:206,desc:"Home to the <strong>world's highest tides</strong>—the Bay of Fundy's tidal range can exceed 16 meters (52 feet), exposing vast ocean floors twice daily. The tidal bores and retreating seas have shaped a dramatic coastal landscape of sea stacks, arches, and fossil-studded cliffs.",descZh:"拥有<strong>世界上最高的潮汐</strong>——芬迪湾的潮差可超过16米（52英尺），每天两次露出广阔的海底。潮涌和退潮塑造了壮观的海岸景观——海蚀柱、拱门和满是化石的悬崖。"},
+{id:128,country:"CA",name:"Kouchibouguac",zh:"库奇布瓜克国家公园",region:"NB",lat:46.850,lng:-64.967,year:1969,rating:4.4,visitors:243000,areakm:239,desc:"Located on the Northumberland Strait coast, protecting salt marshes, barrier lagoons, peat bogs, rivers, and forests. The park's <strong>Kelly's Beach</strong> offers sheltered warm-water swimming behind a barrier bar—one of the warmest saltwater swimming locations north of Virginia. Grey seals and harbour seals are commonly spotted.",descZh:"位于诺森伯兰海峡海岸，保护盐沼、堰洲湖、泥炭沼泽、河流和森林。公园的<strong>凯利海滩</strong>在防波堤后提供遮蔽的温水游泳——是弗吉尼亚以北最温暖的咸水游泳场所之一。灰海豹和港湾海豹常见于此。"},
+{id:129,country:"CA",name:"Prince Edward Island",zh:"爱德华王子岛国家公园",region:"PE",lat:46.467,lng:-63.083,year:1937,rating:4.5,visitors:900000,areakm:22,desc:"Protecting a section of PEI's spectacular north shore, the park's sand dunes, beaches, and red sandstone cliffs make it one of Canada's most popular parks relative to its size. Cavendish Beach is famous for <strong>warm red-sand beaches</strong> and is near the setting of L.M. Montgomery's Anne of Green Gables.",descZh:"保护爱德华王子岛壮观北岸的一段，公园的沙丘、海滩和红色砂岩悬崖使其成为加拿大相对面积最受欢迎的公园之一。卡文迪什海滩以<strong>温暖的红沙海滩</strong>著称，靠近露西·莫德·蒙哥马利《绿山墙的安妮》的故事背景地。"},
+{id:130,country:"CA",name:"Kluane",zh:"克卢恩国家公园",region:"YT",lat:60.617,lng:-138.333,year:1972,rating:4.9,visitors:47000,areakm:22015,desc:"Part of a transboundary UNESCO World Heritage Site with Wrangell–St. Elias (US), Glacier Bay (US), and Tatshenshini-Alsek (BC). Contains the world's largest non-polar icefields—the <strong>Kluane Icefield</strong> is the largest in Canada—and is home to the highest peak in Canada, Mount Logan (19,551 ft).",descZh:"与美国兰格尔-圣伊莱亚斯、冰川湾（美）和英属哥伦比亚塔钦希尼-阿尔塞克共同构成跨境UNESCO世界遗产地。拥有世界最大的非极地冰原——<strong>克卢恩冰原</strong>是加拿大最大的——以及加拿大最高峰洛根山（19,551英尺）。"},
+{id:131,country:"CA",name:"Vuntut",zh:"旺图特国家公园",region:"YT",lat:68.075,lng:-139.767,year:1995,rating:4.7,visitors:179,areakm:4345,desc:"Established with the Vuntut Gwitchin First Nation's self-government agreement, this remote Yukon park protects a critical landscape for the <strong>Porcupine caribou herd</strong>—one of the largest caribou migrations on Earth (180,000+ animals). Adjacent to the U.S. Arctic National Wildlife Refuge. No roads or services.",descZh:"根据万图特格威钦第一民族自治协议建立，这个偏远的育空公园保护着<strong>豪猪河驯鹿群</strong>的关键栖息地——地球上最大的驯鹿迁徙之一（18万多头）。毗邻美国北极国家野生动物保护区，无公路或服务设施。"},
+{id:132,country:"CA",name:"Ivvavik",zh:"伊瓦维克国家公园",region:"YT",lat:69.517,lng:-139.517,year:1984,rating:4.8,visitors:179,areakm:10168,desc:"The first national park in Canada established as a result of a First Nations land claim settlement (Inuvialuit). Protects the migration route and calving grounds of the <strong>Porcupine caribou herd</strong>. Located on the Beaufort Sea coast in the Yukon's Richardson Mountains—rugged Arctic wilderness with no roads.",descZh:"加拿大第一个因第一民族土地索赔协议（伊努维亚卢伊特）而建立的国家公园。保护<strong>豪猪河驯鹿群</strong>的迁徙路线和产犊地。位于育空理查森山脉的波弗特海岸——荒野崎岖的北极地带，无公路。"},
+{id:133,country:"CA",name:"Auyuittuq",zh:"奥于伊图克国家公园",region:"NU",lat:67.883,lng:-65.017,year:2001,rating:4.8,visitors:256,areakm:19707,desc:"'The land that never melts' in Inuktitut—located almost entirely within the Arctic Circle on Baffin Island. The <strong>Akshayuk Pass</strong> (a historic Inuit travel route) cuts through the park beneath 5,000-foot granite walls. Home to polar bears, Arctic foxes, and narwhals in the surrounding Baffin Bay.",descZh:"因纽特语意为\"永不融化的土地\"——几乎完全位于北极圈内的巴芬岛上。<strong>阿克沙尤克山口</strong>（历史悠久的因纽特旅行路线）在5,000英尺高的花岗岩岩壁下穿越公园。周围的巴芬湾是北极熊、北极狐和独角鲸的家园。"},
+{id:134,country:"CA",name:"Quttinirpaaq",zh:"库提尼帕克国家公园",region:"NU",lat:82.700,lng:-70.000,year:2000,rating:4.9,visitors:100,areakm:37775,desc:"Located at the northern tip of Ellesmere Island—the second-largest national park in Canada and the most northerly protected area in the world, just 800 km from the North Pole. The <strong>Arctic ice caps, glaciers, and polar desert</strong> landscapes are of global scientific significance. Fewer than 100 people visit annually.",descZh:"位于埃尔斯米尔岛北端——加拿大第二大国家公园，也是世界上最北端的保护区，距北极点仅800公里。<strong>北极冰盖、冰川和极地荒漠</strong>景观具有全球科学意义。每年访客不足100人。"},
+{id:135,country:"CA",name:"Sirmilik",zh:"西米利克国家公园",region:"NU",lat:72.900,lng:-80.000,year:2001,rating:4.8,visitors:500,areakm:22200,desc:"'Place of glaciers' in Inuktitut—on the northern tip of Baffin Island and Bylot Island. Bylot Island is a globally significant bird sanctuary, home to one of the world's largest colonies of <strong>thick-billed murres</strong> (200,000+) and major populations of snow geese, greater white-fronted geese, and polar bears.",descZh:"因纽特语意为\"冰川之地\"——位于巴芬岛北端和拜洛特岛。拜洛特岛是全球重要的鸟类保护区，是世界最大的<strong>厚嘴海鸦</strong>群落（20万只以上）的家园，以及大量雪雁、大白额雁和北极熊。"},
+{id:136,country:"CA",name:"Ukkusiksalik",zh:"乌库西克萨利克国家公园",region:"NU",lat:65.983,lng:-88.033,year:2003,rating:4.7,visitors:200,areakm:20558,desc:"Named for the Inuit word for soapstone, this park protects a vast subarctic landscape around Wager Bay—an inland sea deep in the Canadian arctic. The bay's tides concentrate marine mammals: <strong>beluga whales, belugas, walrus, and ringed seals</strong> gather here, attracting polar bears. Thousands of years of Inuit history evident in the area.",descZh:"以因纽特语中的皂石命名，公园保护着加拿大北极腹地瓦格尔湾周围广阔的亚北极景观。湾内的潮汐汇聚了海洋哺乳动物：<strong>白鲸、海象和环斑海豹</strong>在此聚集，吸引北极熊前来。该地区有数千年的因纽特历史证据。"},
+{id:137,country:"CA",name:"Aulavik",zh:"奥拉维克国家公园",region:"NT",lat:73.700,lng:-119.917,year:1992,rating:4.8,visitors:34,areakm:12200,desc:"Located on the northern part of Banks Island in the Beaufort Sea, this completely treeless polar desert environment is one of the most remote national parks on Earth. The <strong>Thomsen River</strong> is the northernmost navigable river in Canada, flowing through spectacular canyon scenery. The park protects the world's largest concentration of muskoxen.",descZh:"位于波弗特海班克斯岛北部，这个完全无树的极地荒漠环境是地球上最偏远的国家公园之一。<strong>汤姆森河</strong>是加拿大最北端的通航河流，穿越壮观的峡谷风景。公园保护着世界上最大密度的麝牛群。"},
+{id:138,country:"CA",name:"Nahanni",zh:"纳哈尼国家公园保留地",region:"NT",lat:61.000,lng:-124.000,year:1976,rating:4.9,visitors:1000,areakm:30000,desc:"Canada's first UNESCO World Heritage Site, protecting the South Nahanni River and one of North America's most spectacular wilderness landscapes. <strong>Virginia Falls</strong> at 92 meters is nearly twice the height of Niagara Falls. The river carved four dramatic canyons through the Mackenzie Mountains, with hot springs at the bottom of one.",descZh:"加拿大第一个UNESCO世界遗产地，保护南纳哈尼河和北美最壮观的荒野景观之一。<strong>弗吉尼亚瀑布</strong>高达92米，是尼亚加拉瀑布高度的近两倍。河流穿越麦肯齐山脉雕刻出四条壮观峡谷，其中一条底部有温泉。"},
+{id:139,country:"CA",name:"Tuktut Nogait",zh:"图克图特诺盖特国家公园",region:"NT",lat:69.167,lng:-122.167,year:1998,rating:4.7,visitors:2,areakm:16340,desc:"The least visited national park in Canada, with sometimes fewer than five annual visitors. Protects the calving grounds of the <strong>Bluenose-East caribou herd</strong>, one of the last great wildlife migrations in North America. The Hornaday River carves spectacular canyons through the tundra, accessible only by helicopter.",descZh:"加拿大游客最少的国家公园，有时每年访客不足5人。保护北美最后的伟大野生动物迁徙之一——<strong>蓝鼻-东驯鹿群</strong>的产犊地。霍纳迪河穿越冻原雕刻出壮观峡谷，只能乘直升机到达。"},
+{id:140,country:"CA",name:"Thaidene Nëné",zh:"泰丹内内国家公园保留地",region:"NT",lat:62.500,lng:-109.500,year:2019,rating:4.8,visitors:1000,areakm:14000,desc:"Canada's newest national park reserve (2019), established in collaboration with the Łutsël K'é Dene First Nation, whose name means 'the place where God began.' Protects the East Arm of Great Slave Lake and adjacent tundra-forest transition zone. The <strong>Canadian Shield's Precambrian rock</strong> is exposed in dramatic formations throughout.",descZh:"加拿大最新的国家公园保留地（2019年），与鲁泽尔科丹第一民族合作建立，其名字意为\"上帝开始的地方\"。保护大奴湖东臂及邻近的冻原-森林过渡地带。<strong>加拿大地盾的前寒武纪岩石</strong>在全园以壮观的形态裸露。"},
+{id:141,country:"CA",name:"Nááts'ihch'oh",zh:"纳茨伊乔国家公园保留地",region:"NT",lat:62.500,lng:-127.500,year:2012,rating:4.8,visitors:200,areakm:5765,desc:"Established in 2012, adjacent to Nahanni National Park Reserve, protecting the headwaters of the South Nahanni River in the Mackenzie Mountains. The name means 'sharp like a porcupine quill' in Shúhtagot'ı̨nę (Mountain Dene) language. The park protects critical habitat for <strong>Dall's sheep, mountain caribou, and wolverines</strong>.",descZh:"2012年建立，毗邻纳哈尼国家公园保留地，保护麦肯齐山脉南纳哈尼河源头。名字在修塔格廷内（山地丹内）语中意为\"像豪猪刺一样锋利\"。公园保护<strong>道尔盘羊、山地驯鹿和貂熊</strong>的重要栖息地。"},
+{id:143,country:"CA",name:"Pacific Rim",zh:"太平洋边缘国家公园保留地",region:"BC",lat:49.000,lng:-125.667,year:1970,rating:4.8,visitors:800000,areakm:511,desc:"Protecting the wild west coast of Vancouver Island, Pacific Rim consists of three units: <strong>Long Beach</strong> (10 km of surf-pounded sand), the Broken Group Islands (100+ islands in Barkley Sound), and the West Coast Trail (75-km wilderness route built to rescue shipwrecked sailors). One of the best places in Canada for whale watching—grey whales migrate past in spring.",descZh:"保护温哥华岛狂野的西海岸，太平洋边缘由三部分组成：<strong>长滩</strong>（10公里被浪拍打的沙滩）、布罗肯群岛（巴克利湾100多个岛屿），以及西海岸步道（75公里的荒野路线，最初为营救船难水手而建）。加拿大最佳观鲸地点之一——灰鲸每年春天路过此地迁徙。"},
+{id:144,country:"CA",name:"Waterton Lakes",zh:"沃特顿湖泊国家公园",region:"AB",lat:49.050,lng:-113.900,year:1895,rating:4.8,visitors:500000,areakm:505,desc:"In 1932, Waterton Lakes joined with Montana's Glacier National Park to form the <strong>world's first International Peace Park</strong> and later a UNESCO World Heritage Site. The park features the abrupt meeting of the Rocky Mountains and prairie—mountains rise almost directly from flat grassland with no foothills. Prince of Wales Hotel, perched on a ridge above Upper Waterton Lake, is one of Canada's most iconic heritage hotels.",descZh:"1932年，沃特顿湖泊与美国蒙大拿州的冰川国家公园合并，形成<strong>世界第一个国际和平公园</strong>，后来成为UNESCO世界遗产地。公园以落基山脉与草原的骤然相遇著称——山脉几乎直接从平坦草地升起，没有丘陵过渡。威尔士亲王酒店俯瞰上沃特顿湖，是加拿大最具代表性的历史遗产酒店之一。"},
+{id:145,country:"CA",name:"Torngat Mountains",zh:"托恩加特山脉国家公园",region:"NL",lat:58.833,lng:-64.167,year:2008,rating:4.9,visitors:1000,areakm:9700,desc:"Located at the northern tip of Labrador, Torngat Mountains (meaning 'place of spirits' in Inuktitut) protects a dramatic landscape of ancient Precambrian rock, deep fjords, and Arctic tundra. This is <strong>Inuit homeland</strong>—the Labrador Inuit have lived here for at least 9,000 years. Polar bears, black bears, and woodland caribou are commonly encountered. Access is by charter aircraft only.",descZh:"位于拉布拉多北端，托恩加特山脉（因纽特语意为\"精灵之地\"）保护着古老前寒武纪岩石、深邃峡湾和北极冻原的壮观景观。这是<strong>因纽特人的家园</strong>——拉布拉多因纽特人在此居住了至少9,000年。北极熊、黑熊和林地驯鹿常见于此。只能乘包机到达。"},
+{id:146,country:"CA",name:"Qausuittuq",zh:"高苏图克国家公园",region:"NU",lat:75.900,lng:-97.500,year:2015,rating:4.7,visitors:100,areakm:11088,desc:"Established in 2015 on northern Bathurst Island and surrounding islands in the High Arctic, Qausuittuq (meaning 'place where the sun doesn't rise' in Inuktitut) is one of Canada's newest national parks. The park protects a representative sample of the <strong>High Arctic ecosystem</strong>, home to Peary caribou (critically endangered), muskoxen, Arctic foxes, and polar bears. One of the most remote and least visited parks on Earth.",descZh:"2015年建立于努纳武特巴瑟斯特岛北部，高苏图克（因纽特语意为\"太阳不升起的地方\"）是加拿大最新的国家公园之一。公园保护高北极生态系统的代表性样本，栖息着<strong>皮里驯鹿</strong>（极度濒危）、麝牛、北极狐和北极熊。是地球上最偏远、游客最少的公园之一。"},
+{id:142,country:"CA",name:"Pituamkek",zh:"皮图阿姆凯克国家公园保留地",region:"PE",lat:46.600,lng:-63.900,year:2022,rating:4.4,visitors:10000,areakm:50,desc:"Canada's 48th national park, established in 2022 near Lennox Island First Nation on Prince Edward Island. Named in Mi'kmaq for 'dunes covered in grass,' protecting a coastal ecosystem of sand dunes, beaches, salt marshes, and estuaries. Established in close partnership with the <strong>Lennox Island Mi'kmaq community</strong>.",descZh:"加拿大第48个国家公园，2022年在爱德华王子岛莱诺克斯岛第一民族附近建立。以米克马语命名，意为\"覆盖着草的沙丘\"，保护沙丘、海滩、盐沼和河口的海岸生态系统。与<strong>莱诺克斯岛米克马社区</strong>密切合作建立。"}
+];
+
+// ══════════════════════════════════════════
+// WIKI URL HELPERS
+// ══════════════════════════════════════════
+function wikiRestTitle(park) {
+  const n = park.name;
+  if (park.country === "CA") {
+    const special = {
+      "Gwaii Haanas": "Gwaii_Haanas_National_Park_Reserve_and_Haida_Heritage_Site",
+      "Kluane": "Kluane_National_Park_and_Reserve",
+      "Gulf Islands": "Gulf_Islands_National_Park_Reserve",
+      "Pacific Rim": "Pacific_Rim_National_Park_Reserve",
+      "Nahanni": "Nahanni_National_Park_Reserve",
+      "Glacier": "Glacier_National_Park_(Canada)",
+      "Mingan Archipelago": "Mingan_Archipelago_National_Park_Reserve",
+      "Thaidene N\u00ebn\u00e9": "Thaidene_N%C3%ABn%C3%A9_National_Park_Reserve",
+      "N\u00e1\u00e1ts'ihch'oh": "N%C3%A1%C3%A1ts%27ihch%27oh_National_Park_Reserve",
+      "Akami-Uapishku-KakKasuak-Mealy Mountains": "Akami%E2%88%92Uapishk%E1%B5%98%E2%88%92KakKasuak%E2%88%92Mealy_Mountains_National_Park_Reserve"
+    };
+    return special[n] || encodeURIComponent(n.replace(/ /g,"_") + "_National_Park");
+  } else {
+    const special = {
+      "Haleak\u0101l\u0101": "Haleakal%C4%81_National_Park",
+      "Hawaii Volcanoes": "Hawaii_Volcanoes_National_Park",
+      "Wrangell-St. Elias": "Wrangell%E2%80%93St._Elias_National_Park_and_Preserve",
+      "Gates of the Arctic": "Gates_of_the_Arctic_National_Park_and_Preserve",
+      "Katmai": "Katmai_National_Park_and_Preserve",
+      "Lake Clark": "Lake_Clark_National_Park_and_Preserve",
+      "New River Gorge": "New_River_Gorge_National_Park_and_Preserve"
+    };
+    return special[n] || encodeURIComponent(n.replace(/ /g,"_") + "_National_Park");
+  }
+}
+
+function wikiUrl(park) {
+  return "https://en.wikipedia.org/wiki/" + wikiRestTitle(park);
+}
+
+// ══════════════════════════════════════════
+// PHOTO CACHE & FETCH
+// Uses Wikipedia REST API (rest_v1/page/summary) — faster, CDN-cached, returns wiki URL too
+// 4s AbortController timeout, pending-dedup, background preload
+// ══════════════════════════════════════════
+const photoCache = {};  // id → {src, pageUrl} | null | "pending"
+
+async function fetchParkPhoto(park) {
+  const key = park.id;
+  // Already resolved
+  if (photoCache[key] !== undefined && photoCache[key] !== "pending") return photoCache[key];
+  // In-flight: wait for it
+  if (photoCache[key] === "pending") {
+    return new Promise(resolve => {
+      const t = setInterval(() => {
+        if (photoCache[key] !== "pending") { clearInterval(t); resolve(photoCache[key]); }
+      }, 80);
+      setTimeout(() => { clearInterval(t); resolve(photoCache[key] || null); }, 5000);
+    });
+  }
+  photoCache[key] = "pending";
+  const title = wikiRestTitle(park);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(
+      "https://en.wikipedia.org/api/rest_v1/page/summary/" + title,
+      { signal: controller.signal }
+    );
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.thumbnail && data.thumbnail.source) {
+        // Request larger image by bumping px in URL
+        const src = data.thumbnail.source.replace(/\/\d+px-/, "/800px-");
+        const result = { src, pageUrl: data.content_urls?.desktop?.page || wikiUrl(park) };
+        photoCache[key] = result;
+        return result;
+      }
+    }
+  } catch(e) { clearTimeout(timer); }
+  photoCache[key] = null;
+  return null;
+}
+
+async function loadParkPhoto(park) {
+  const img = document.getElementById("detail-photo");
+  const placeholder = document.getElementById("photo-placeholder");
+  const credit = document.getElementById("photo-credit");
+  img.classList.remove("loaded");
+  img.src = "";
+  placeholder.style.display = "flex";
+  document.getElementById("photo-loading-text").textContent = T("photoLoading");
+  credit.innerHTML = "";
+  const photo = await fetchParkPhoto(park);
+  if (photo && photo.src) {
+    img.onload = () => { img.classList.add("loaded"); placeholder.style.display = "none"; };
+    img.onerror = () => { placeholder.style.display = "flex"; document.getElementById("photo-loading-text").textContent = T("noPhoto"); };
+    img.src = photo.src;
+    credit.innerHTML = `<a href="${photo.pageUrl}" target="_blank" rel="noopener">${T("photoVia")}</a>`;
+  } else {
+    document.getElementById("photo-loading-text").textContent = T("noPhoto");
+  }
+}
+
+// Silent background preload for the first N parks in the current list
+function preloadVisiblePhotos() {
+  const batch = filtered.slice(0, 18);
+  let i = 0;
+  function next() {
+    if (i >= batch.length) return;
+    const park = batch[i++];
+    if (photoCache[park.id] === undefined) {
+      fetchParkPhoto(park).finally(() => setTimeout(next, 250));
+    } else { next(); }
+  }
+  setTimeout(next, 2000);  // start 2s after page load, giving map time to settle
+}
+
+// ══════════════════════════════════════════
+// MAP BOUNDS — North America (US + Canada + Mexico)
+// ══════════════════════════════════════════
+const NA_BOUNDS = L.latLngBounds(L.latLng(-10, -180), L.latLng(84, -50));
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let map, markerMap={}, currentSort="name", activeId=null, sidebarOpen=true;
+let filtered=[...PARKS];
+
+// ══════════════════════════════════════════
+// MAP INIT
+// ══════════════════════════════════════════
+function initMap() {
+  map = L.map("map", {
+    center:[54, -97], zoom:3, minZoom:2, maxZoom:15,
+    maxBounds:NA_BOUNDS, maxBoundsViscosity:0.85,
+    zoomControl:true, attributionControl:false
+  });
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {maxZoom:19}).addTo(map);
+  map.on("mousemove", e => {
+    const lat=e.latlng.lat.toFixed(4), lng=Math.abs(e.latlng.lng).toFixed(4), ew=e.latlng.lng<0?"W":"E";
+    document.getElementById("status-coord").textContent = lat+"°N  "+lng+"°"+ew;
+  });
+  PARKS.forEach(park => {
+    const el = document.createElement("div");
+    el.className = "custom-marker " + park.country.toLowerCase();
+    el.title = park.name;
+    const marker = L.marker([park.lat, park.lng], {
+      icon: L.divIcon({className:"", html:el, iconSize:[10,10], iconAnchor:[5,5]})
+    }).addTo(map);
+    marker.bindPopup(() => {
+      const frLine = park.nameFr ? `<div class="popup-name-fr">${park.nameFr}</div>` : "";
+      const popupName = lang==="zh" ? park.zh : park.name;
+      return `<div class="popup-name"><a href="${wikiUrl(park)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:inherit;text-decoration:none;" title="Wikipedia">${popupName} ↗</a></div>${frLine}<div class="popup-meta">📍 ${park.region} &nbsp;·&nbsp; Est. ${park.year}</div><div class="popup-meta">${renderStars(park.rating)} ${park.rating} &nbsp;·&nbsp; ${fmtV(park.visitors)}${T("visitorsUnit")}</div>`;
+    }, {maxWidth:230});
+    marker.on("click", ()=>openDetail(park.id));
+    markerMap[park.id]={marker, el};
+  });
+}
+
+// ══════════════════════════════════════════
+// REGION FILTER — dynamic based on country selection
+// ══════════════════════════════════════════
+function populateRegions() {
+  const country = document.getElementById("filter-country").value;
+  const sel = document.getElementById("filter-region");
+  const cur = sel.value;
+  while(sel.options.length > 1) sel.remove(1);
+  const regions = [...new Set(
+    PARKS.filter(p => !country || p.country === country)
+      .map(p => p.region).flatMap(r => r.split("/"))
+  )].sort();
+  regions.forEach(r => {
+    const o = document.createElement("option");
+    o.value = r; o.textContent = r; sel.appendChild(o);
+  });
+  // restore selection if still valid
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+
+// ══════════════════════════════════════════
+// FILTERS
+// ══════════════════════════════════════════
+function applyFilters() {
+  const q = document.getElementById("search").value.toLowerCase();
+  const country = document.getElementById("filter-country").value;
+  const region = document.getElementById("filter-region").value;
+  const year = +document.getElementById("year-range").value;
+  filtered = PARKS.filter(p => {
+    const matchQ = p.name.toLowerCase().includes(q) || p.zh.includes(q) || p.region.toLowerCase().includes(q) || (p.nameFr && p.nameFr.toLowerCase().includes(q));
+    const matchC = !country || p.country === country;
+    const matchR = !region || p.region.includes(region);
+    const matchY = p.year <= year;
+    return matchQ && matchC && matchR && matchY;
+  });
+  renderList();
+  updateMarkers();
+}
+
+function resetFilters() {
+  document.getElementById("search").value = "";
+  document.getElementById("filter-country").value = "";
+  document.getElementById("filter-region").value = "";
+  document.getElementById("year-range").value = 2024;
+  updateYearLabel();
+  populateRegions();
+  filtered = [...PARKS];
+  renderList();
+  updateMarkers();
+}
+
+function updateYearLabel() {
+  document.getElementById("year-label").textContent = document.getElementById("year-range").value;
+}
+
+function setSort(key, btn) {
+  currentSort = key;
+  document.querySelectorAll(".sort-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderList();
+}
+
+function sortedFiltered() {
+  return [...filtered].sort((a,b) => {
+    if(currentSort==="name") return (lang==="zh"?a.zh:a.name).localeCompare(lang==="zh"?b.zh:b.name);
+    if(currentSort==="rating") return b.rating-a.rating;
+    if(currentSort==="year") return a.year-b.year;
+    if(currentSort==="visitors") return b.visitors-a.visitors;
+  });
+}
+
+// ══════════════════════════════════════════
+// RENDER LIST
+// ══════════════════════════════════════════
+function renderList() {
+  const list = document.getElementById("park-list");
+  const sorted = sortedFiltered();
+  const usCount = sorted.filter(p=>p.country==="US").length;
+  const caCount = sorted.filter(p=>p.country==="CA").length;
+  document.getElementById("park-count").textContent = `${sorted.length} ${T("parksUnit")}`;
+  document.getElementById("status-visible").textContent = `${sorted.length} ${T("visibleUnit")} (🇺🇸${usCount} 🇨🇦${caCount})`;
+
+  list.innerHTML = sorted.map((p,i) => {
+    const frLine = (lang==="en" && p.nameFr) ? `<div class="park-item-fr">${p.nameFr}</div>` : "";
+    const displayName = lang==="zh" ? p.zh : p.name;
+    const wikiHref = wikiUrl(p);
+    return `<div class="park-item ${p.country.toLowerCase()} ${p.id===activeId?"active":""}" onclick="openDetail(${p.id})">
+      <div class="park-rank">${String(i+1).padStart(2,"0")}</div>
+      <div class="park-item-body">
+        <div class="park-item-name">
+          ${displayName}
+          <a href="${wikiHref}" target="_blank" rel="noopener" class="wiki-link" onclick="event.stopPropagation()" title="Wikipedia">↗</a>
+        </div>
+        ${frLine}
+        <div class="park-item-meta">
+          <span class="badge ${p.country.toLowerCase()}">${p.country==="US"?"🇺🇸 US":"🇨🇦 CA"}</span>
+          <span style="color:${p.country==="CA"?"var(--accent-ca)":"var(--accent)"}">${p.region}</span>
+          <span>${p.year}</span>
+          <span>${renderStars(p.rating)}</span>
+          <span>${fmtV(p.visitors)}${T("visitorsUnit")}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateMarkers() {
+  const visIds = new Set(filtered.map(p=>p.id));
+  Object.entries(markerMap).forEach(([id,{el}]) => el.classList.toggle("dimmed", !visIds.has(+id)));
+}
+
+// ══════════════════════════════════════════
+// DETAIL PANEL
+// ══════════════════════════════════════════
+function openDetail(id) {
+  const park = PARKS.find(p=>p.id===id);
+  if(!park) return;
+  activeId = id;
+  refreshDetailText(park);
+  loadParkPhoto(park);
+  document.getElementById("detail-panel").classList.add("open");
+  map.flyTo([park.lat, park.lng], park.country==="CA"?6:8, {duration:1.2});
+  markerMap[id].marker.openPopup();
+  Object.entries(markerMap).forEach(([mid,{el}]) => el.classList.toggle("highlight", +mid===id));
+  renderList();
+}
+
+function refreshDetailText(park) {
+  if(!park) park = PARKS.find(p=>p.id===activeId);
+  if(!park) return;
+  const zh = lang==="zh";
+  const displayName = zh ? park.zh : park.name + " National Park";
+  // Title with wiki link
+  const titleEl = document.getElementById("detail-title");
+  titleEl.innerHTML = `${displayName} <a href="${wikiUrl(park)}" target="_blank" rel="noopener" class="wiki-link-title" title="Wikipedia">↗</a>`;
+  // French name line — shown in English mode only
+  const frEl = document.getElementById("detail-title-fr");
+  frEl.textContent = (lang==="en" && park.nameFr) ? park.nameFr : "";
+  // Subtitle
+  const flag = park.country==="US" ? "🇺🇸" : "🇨🇦";
+  const countryName = zh ? (park.country==="US"?T("countryUS"):T("countryCA")) : (park.country==="US"?"United States":"Canada");
+  document.getElementById("detail-subtitle").textContent = `${flag} ${countryName}  ·  ${park.region}  ·  Est. ${park.year}  ·  ${fmtArea(park.areakm)}`;
+  // Stats
+  const valClass = park.country==="CA" ? "blue" : "green";
+  document.getElementById("detail-stats").innerHTML = `
+    <div class="stat-block"><div class="stat-label">${T("statRating")}</div><div class="stat-val"><span class="accent">${renderStars(park.rating)} ${park.rating}</span></div></div>
+    <div class="stat-block"><div class="stat-label">${T("statVisitors")}</div><div class="stat-val"><span class="${valClass}">${fmtV(park.visitors)}</span></div></div>
+    <div class="stat-block"><div class="stat-label">${T("statArea")}</div><div class="stat-val">${fmtArea(park.areakm)}</div></div>
+    <div class="stat-block"><div class="stat-label">${T("statEst")}</div><div class="stat-val">${park.year}</div></div>
+    <div class="stat-block"><div class="stat-label">${T("statLoc")}</div><div class="stat-val">${park.region}</div></div>
+  `;
+  // Description
+  const desc = zh ? park.descZh : park.desc;
+  document.getElementById("detail-desc").innerHTML = desc;
+  // photo credit refresh
+  const credit = document.getElementById("photo-credit");
+  if(credit.innerHTML){const a=credit.querySelector("a");if(a)a.textContent=T("photoVia");}
+}
+
+function closeDetail() {
+  document.getElementById("detail-panel").classList.remove("open");
+  activeId = null;
+  Object.values(markerMap).forEach(({el})=>el.classList.remove("highlight"));
+  renderList();
+}
+
+// ══════════════════════════════════════════
+// SIDEBAR TOGGLE
+// ══════════════════════════════════════════
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  document.getElementById("sidebar").classList.toggle("collapsed", !sidebarOpen);
+  const btn = document.getElementById("sidebar-toggle");
+  btn.textContent = sidebarOpen ? "▶" : "◀";
+  btn.classList.toggle("collapsed", !sidebarOpen);
+  btn.style.right = sidebarOpen ? "var(--panel-width)" : "0";
+  document.getElementById("detail-panel").style.right = sidebarOpen ? "var(--panel-width)" : "0";
+  document.getElementById("status-bar").style.right = sidebarOpen ? "var(--panel-width)" : "0";
+}
+
+// ══════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════
+function renderStars(r){const f=Math.round(r);return "★".repeat(f)+"☆".repeat(5-f);}
+function fmtV(n){if(n>=1000000)return(n/1000000).toFixed(1)+"M";if(n>=1000)return(n/1000).toFixed(0)+"K";return n.toString();}
+function fmtArea(km){
+  if(lang==="zh"){if(km>=10000)return(km/10000).toFixed(1)+"万平方公里";return km.toLocaleString()+" 平方公里";}
+  if(km>=1000)return(km/1000).toFixed(1)+"K km²";return km.toLocaleString()+" km²";
+}
+
+// ══════════════════════════════════════════
+// MOBILE DETECTION & HELPERS
+// ══════════════════════════════════════════
+const isMobile = () => window.innerWidth <= 768;
+
+function closeMobileDrawers() {
+  document.getElementById("park-drawer").classList.remove("open");
+  document.getElementById("filter-drawer").classList.remove("open");
+  document.getElementById("mobile-overlay").classList.remove("show");
+  document.querySelectorAll(".mnav-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("mnav-map").classList.add("active");
+}
+
+function mobileNavMap() {
+  closeMobileDrawers();
+}
+
+function mobileNavList() {
+  const drawer = document.getElementById("park-drawer");
+  const isOpen = drawer.classList.contains("open");
+  closeMobileDrawers();
+  if (!isOpen) {
+    drawer.classList.add("open");
+    document.getElementById("mobile-overlay").classList.add("show");
+    document.getElementById("mnav-list").classList.add("active");
+    document.getElementById("mnav-map").classList.remove("active");
+    renderMobileList();
+  }
+}
+
+function mobileNavFilter() {
+  const drawer = document.getElementById("filter-drawer");
+  const isOpen = drawer.classList.contains("open");
+  closeMobileDrawers();
+  if (!isOpen) {
+    drawer.classList.add("open");
+    document.getElementById("mobile-overlay").classList.add("show");
+    document.getElementById("mnav-filter").classList.add("active");
+    document.getElementById("mnav-map").classList.remove("active");
+  }
+}
+
+// Keep desktop + mobile filter inputs in sync
+function syncFilters() {
+  if (isMobile()) {
+    const ms = document.getElementById("m-search");
+    const mc = document.getElementById("m-filter-country");
+    const mr = document.getElementById("m-filter-region");
+    const my = document.getElementById("m-year-range");
+    if (ms) document.getElementById("search").value = ms.value;
+    if (mc) document.getElementById("filter-country").value = mc.value;
+    if (mr) document.getElementById("filter-region").value = mr.value;
+    if (my) document.getElementById("year-range").value = my.value;
+  }
+}
+
+function resetMobileFilters() {
+  ["m-search"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+  ["m-filter-country","m-filter-region"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+  const my = document.getElementById("m-year-range");
+  if (my) { my.value = 2024; document.getElementById("m-year-label").textContent = "2024"; }
+  syncFilters();
+  resetFilters();
+  renderMobileList();
+}
+
+// Mobile park list render (uses same PARKS + filtered data)
+function renderMobileList() {
+  if (!isMobile()) return;
+  const list = document.getElementById("drawer-list");
+  if (!list) return;
+  const sorted = sortedFiltered();
+  document.getElementById("drawer-park-count").textContent = `${sorted.length} ${T("parksUnit")}`;
+  list.innerHTML = sorted.map((p, i) => {
+    const displayName = lang === "zh" ? p.zh : p.name;
+    return `<div class="park-item ${p.country.toLowerCase()}" onclick="openMobileDetail(${p.id})" style="padding:12px 16px">
+      <div class="park-rank">${String(i+1).padStart(2,"0")}</div>
+      <div class="park-item-body">
+        <div class="park-item-name" style="font-size:14px">${displayName}</div>
+        <div class="park-item-meta" style="margin-top:3px">
+          <span class="badge ${p.country.toLowerCase()}">${p.country==="US"?"🇺🇸":"🇨🇦"}</span>
+          <span style="color:${p.country==="CA"?"var(--accent-ca)":"var(--accent)"}">${p.region}</span>
+          <span>${p.year}</span>
+          <span>${renderStars(p.rating)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// Mobile detail panel
+function openMobileDetail(id) {
+  const park = PARKS.find(p => p.id === id);
+  if (!park) return;
+  activeId = id;
+
+  // Close list drawer first
+  document.getElementById("park-drawer").classList.remove("open");
+  document.getElementById("mobile-overlay").classList.remove("show");
+
+  // Populate mobile detail
+  const zh = lang === "zh";
+  const displayName = zh ? park.zh : park.name + " National Park";
+  document.getElementById("mobile-detail-title").innerHTML =
+    `${displayName} <a href="${wikiUrl(park)}" target="_blank" rel="noopener" style="color:var(--text-dim);font-size:13px;text-decoration:none;opacity:.6">↗</a>`;
+  const frEl = document.getElementById("mobile-detail-title-fr");
+  frEl.textContent = (lang === "en" && park.nameFr) ? park.nameFr : "";
+  const flag = park.country === "US" ? "🇺🇸" : "🇨🇦";
+  document.getElementById("mobile-detail-subtitle").textContent =
+    `${flag} ${park.region}  ·  Est. ${park.year}  ·  ${fmtArea(park.areakm)}`;
+
+  const valClass = park.country === "CA" ? "blue" : "green";
+  document.getElementById("mobile-detail-stats").innerHTML = [
+    [T("statRating"), `<span class="accent">${renderStars(park.rating)} ${park.rating}</span>`],
+    [T("statVisitors"), `<span class="${valClass}">${fmtV(park.visitors)}${T("visitorsUnit")}</span>`],
+    [T("statArea"), fmtArea(park.areakm)],
+    [T("statEst"), park.year],
+    [T("statLoc"), park.region],
+    [T("statCountry"), zh ? (park.country==="US"?T("countryUS"):T("countryCA")) : (park.country==="US"?"United States":"Canada")]
+  ].map(([label, val]) =>
+    `<div class="mobile-stat"><div class="stat-label">${label}</div><div class="stat-val">${val}</div></div>`
+  ).join("");
+
+  document.getElementById("mobile-detail-desc").innerHTML = zh ? park.descZh : park.desc;
+
+  // Reset photo
+  const mImg = document.getElementById("mobile-detail-photo");
+  const mPlaceholder = document.getElementById("mobile-photo-placeholder");
+  const mCredit = document.getElementById("mobile-photo-credit");
+  mImg.classList.remove("loaded"); mImg.src = "";
+  mPlaceholder.style.display = "flex";
+  document.getElementById("mobile-photo-loading-text").textContent = T("photoLoading");
+  mCredit.innerHTML = "";
+
+  // Show panel
+  document.getElementById("mobile-detail").classList.add("open");
+
+  // Fly map
+  map.flyTo([park.lat, park.lng], park.country === "CA" ? 6 : 8, { duration: 1.0 });
+  if (markerMap[id]) markerMap[id].marker.openPopup();
+
+  // Load photo
+  fetchParkPhoto(park).then(photo => {
+    if (photo && photo.src) {
+      mImg.onload = () => { mImg.classList.add("loaded"); mPlaceholder.style.display = "none"; };
+      mImg.onerror = () => { document.getElementById("mobile-photo-loading-text").textContent = T("noPhoto"); };
+      mImg.src = photo.src;
+      mCredit.innerHTML = `<a href="${photo.pageUrl}" target="_blank" rel="noopener">${T("photoVia")}</a>`;
+    } else {
+      document.getElementById("mobile-photo-loading-text").textContent = T("noPhoto");
+    }
+  });
+}
+
+function closeMobileDetail() {
+  document.getElementById("mobile-detail").classList.remove("open");
+  activeId = null;
+}
+
+// Override openDetail on mobile to use mobile panel instead
+const _openDetailOriginal = openDetail;
+function openDetail(id) {
+  if (isMobile()) { openMobileDetail(id); return; }
+  _openDetailOriginal(id);
+}
+
+// Sync language toggle to mobile nav label
+const _toggleLangOriginal = toggleLang;
+function toggleLang() {
+  _toggleLangOriginal();
+  const lbl = document.getElementById("mnav-lang-label");
+  if (lbl) lbl.textContent = lang === "en" ? "中文" : "EN";
+  renderMobileList();
+  // sync i18n to mobile elements
+  const me = document.getElementById("m-lbl-est");
+  if (me) me.textContent = T("estBefore");
+  const dp = document.getElementById("filter-drawer-title");
+  if (dp) dp.textContent = lang === "zh" ? "筛选" : "Filters";
+  const dh = document.getElementById("drawer-lbl-parks");
+  if (dh) dh.textContent = T("parks");
+}
+
+// Populate mobile region dropdown when country changes
+function populateMobileRegions() {
+  const country = document.getElementById("m-filter-country")?.value || "";
+  const sel = document.getElementById("m-filter-region");
+  if (!sel) return;
+  const cur = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  const regions = [...new Set(
+    PARKS.filter(p => !country || p.country === country)
+      .map(p => p.region).flatMap(r => r.split("/"))
+  )].sort();
+  regions.forEach(r => { const o = document.createElement("option"); o.value = r; o.textContent = r; sel.appendChild(o); });
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  populateRegions();
+  initMap();
+  renderList();
+  preloadVisiblePhotos();
+  // Mobile: hook country select to repopulate regions
+  const mc = document.getElementById("m-filter-country");
+  if (mc) mc.addEventListener("change", populateMobileRegions);
+});
+</script>
+</body>
+</html>
