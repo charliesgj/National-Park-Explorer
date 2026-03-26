@@ -6,7 +6,7 @@
 
 ---
 
-![Dashboard Screenshot](assets/screenshot.png)
+![Dashboard Screenshot](assets/national-park-explorer.png)
 *The full dashboard — dark map, bilingual sidebar, and a detail panel that actually tells you something useful.*
 
 ---
@@ -68,41 +68,6 @@ Some highlights across the 109:
 - **Oldest**: Yellowstone, 1872 — the world's first national park, full stop
 - **Newest**: Pituamkek, PE (2022) — established in partnership with the Lennox Island Mi'kmaq community
 - **Most dramatic geology**: Gros Morne, NL — you can literally walk on Earth's mantle
-
----
-
-## Usage
-
-Just open `north_america_parks.html` in any modern browser. That's it.
-
-```
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-
-# Open the dashboard
-open north_america_parks.html     # macOS
-start north_america_parks.html    # Windows
-xdg-open north_america_parks.html # Linux
-```
-
-No dependencies to install. The file fetches Leaflet and Google Fonts from CDN on first load, and pulls Wikipedia photos on demand.
-
----
-
-## Tech Notes
-
-- **Map**: [Leaflet.js](https://leafletjs.com/) with CartoDB dark tiles
-- **Photos**: Wikipedia REST API (`/api/rest_v1/page/summary`) — CDN-cached, 4s timeout with `AbortController`, background preloading for the top 18 parks in the current list
-- **Data**: All park data (coordinates, stats, descriptions) manually researched and written
-- **Size**: Single HTML file, ~750 lines, zero runtime dependencies beyond CDN scripts
-
----
-
-## Screenshots
-
-| Map view | Detail panel |
-|---|---|
-| ![Map](assets/screenshot_map.png) | ![Detail](assets/screenshot_detail.png) |
 
 ---
 
