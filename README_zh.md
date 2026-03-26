@@ -71,41 +71,6 @@
 
 ---
 
-## 使用方法
-
-用任意现代浏览器打开 `north_america_parks.html` 即可。就这样。
-
-```bash
-# 克隆仓库
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-
-# 打开 dashboard
-open north_america_parks.html      # macOS
-start north_america_parks.html     # Windows
-xdg-open north_america_parks.html  # Linux
-```
-
-无需安装任何依赖。文件首次加载时从 CDN 拉取 Leaflet 和 Google Fonts，图片则在点击时按需从维基百科获取。
-
----
-
-## 技术说明
-
-- **地图**：[Leaflet.js](https://leafletjs.com/) + CartoDB 暗色瓦片
-- **图片**：维基百科 REST API（`/api/rest_v1/page/summary`）—— CDN 缓存，4秒 `AbortController` 超时，后台为列表前18个公园预加载
-- **数据**：所有公园坐标、统计数据、简介均为手工整理和撰写
-- **体积**：单个 HTML 文件，约750行，除 CDN 脚本外零运行时依赖
-
----
-
-## 截图
-
-| 地图全景 | 详情面板 |
-|---|---|
-| ![地图](assets/screenshot_map.png) | ![详情](assets/screenshot_detail.png) |
-
----
-
 ## 贡献
 
 发现坐标有偏差？某个公园的简介辜负了它的壮美？游客数据已经过时了两年？欢迎提 PR。
