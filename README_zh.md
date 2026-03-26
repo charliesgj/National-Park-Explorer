@@ -6,7 +6,7 @@
 
 ---
 
-![Dashboard 截图](assets/screenshot.png)
+![Dashboard 截图](assets/national-park-explorer.png)
 *完整界面 —— 暗色地图、双语侧边栏，以及一个真正有内容的详情面板。*
 
 ---
